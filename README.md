@@ -6,6 +6,35 @@
 
 下载: https://modrinth.com/plugin/AutoUpdatePlugins
 
+
+由于 Velocity 无法使用 update 文件夹自动更新插件，需要在启动脚本前添加文件移动命令：
+
+**启动脚本示例：**
+
+```batch
+move /Y plugins\update\*.jar plugins\ 2>nul
+java -jar velocity.jar
+```
+
+**如果不支持多行命令，可以参考以下方法：**
+
+```batch
+cmd /c "move /Y plugins\update\*.jar plugins\ 2>nul & java -jar velocity.jar"
+```
+
+**服务器目录结构示例：**
+
+```
+velocity-server/
+├── velocity.jar
+├── plugins/             # 插件目录
+│   ├── update/          # 下载的更新文件存放目录
+│   │   ├── plugin1.jar  # 等待更新的插件
+│   │   └── plugin2.jar  # 等待更新的插件
+│   └── ...              # 其他已安装的插件
+└── start.bat            # 启动脚本（包含文件移动命令）
+```
+
 ---
 
 ## 功能和指令

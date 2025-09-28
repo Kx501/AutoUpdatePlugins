@@ -1,0 +1,12 @@
+{
+    "id": "autoupdateplugins",
+    "name": "AutoUpdatePlugins",
+    "version": "${project.version}",
+    "description": "Auto updates plugins from multiple sources on Velocity.",
+    "authors": [
+        "ApliNi"
+    ],
+    "url": "https://github.com/ApliNi/AutoUpdatePlugins",
+    "main": "io.github.aplini.autoupdateplugins.AutoUpdatePluginsVelocity",
+    "dependencies": []
+}
