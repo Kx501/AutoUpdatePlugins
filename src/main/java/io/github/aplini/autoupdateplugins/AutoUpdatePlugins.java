@@ -2,6 +2,7 @@ package io.github.aplini.autoupdateplugins;
 
 import com.google.common.io.ByteStreams;
 import com.google.gson.Gson;
+import okhttp3.Call;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -76,18 +77,18 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
             // 创建一个 TrustManager, 它将接受任何证书
             TrustManager[] trustAllCerts = new TrustManager[] {
                     new X509TrustManager() {
-                        public java.security.cert.X509Certificate[] getAcceptedIssuers() {
+                        public X509Certificate[] getAcceptedIssuers() {
                             return null;
                         }
-                        public void checkClientTrusted(java.security.cert.X509Certificate[] certs, String authType) {}
-                        public void checkServerTrusted(java.security.cert.X509Certificate[] certs, String authType) {}
+                        public void checkClientTrusted(X509Certificate[] certs, String authType) {}
+                        public void checkServerTrusted(X509Certificate[] certs, String authType) {}
                     }
             };
             // 获取默认的 SSLContext
             SSLContext sslContext;
             try {
                 sslContext = SSLContext.getInstance("TLS");
-                sslContext.init(null, trustAllCerts, new java.security.SecureRandom());
+                sslContext.init(null, trustAllCerts, new SecureRandom());
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
@@ -719,11 +720,12 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
 
             // 启用网络代理
             if(!getConfig().getString("proxy.type", "DIRECT").equals("DIRECT")){
-                client.proxy(new Proxy(
+                Proxy proxy = new Proxy(
                         Proxy.Type.valueOf(getConfig().getString("proxy.type")),
                         new InetSocketAddress(
                                 getConfig().getString("proxy.host", "127.0.0.1"),
-                                getConfig().getInt("proxy.port", 7890))));
+                                getConfig().getInt("proxy.port", 7890)));
+                client.proxy(proxy);
             }
 
             // 禁用 SSL 验证
@@ -765,6 +767,7 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                 }
             }
 
+            Response res = null;
             for(int i = 0; i < getConfig().getInt("fetchErrRetry", 4); i++){
                 if(i > 0){
                     try {
@@ -776,9 +779,10 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                     }
                 }
                 try{
-                    okhttp3.Call call = client.build().newCall(request.build());
-                    Response res = call.execute();
+                    Call call = client.build().newCall(request.build());
+                    res = call.execute();
                     if (!res.isSuccessful()) {
+                        res.close();
                         continue;
                     }
                     return res;
@@ -786,6 +790,7 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                     log(logLevel.NET_WARN, "[HTTP] " + e.getMessage());
                 }
             }
+            if(res != null) res.close();
             return null;
         }
 
@@ -793,7 +798,9 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
         public String httpGet(String url) {
             try(Response res = fetch(url, false)){
                 if(res == null) return null;
-                return res.body().string();
+                String str = res.body().string();
+                res.close();
+                return str;
             } catch (IOException e) {
                 log(logLevel.NET_WARN, "[HTTP] " + e.getMessage());
             }
@@ -813,6 +820,8 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                         outputStream.write(buffer, 0, bytesRead);
                     }
                 }
+                res.close();
+                return true;
             } catch (IOException e) {
                 log(logLevel.NET_WARN, "[HTTP] " + e.getMessage());
             }
