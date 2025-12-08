@@ -831,6 +831,8 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
         // 在插件更新过程中输出尽可能详细的日志
         public void log(logLevel level, String text){
 
+            if(text.isEmpty()) return;
+
             // 获取用户启用了哪些日志等级
             List<String> userLogLevel = getConfig().getStringList("logLevel");
             if(userLogLevel.isEmpty()){
