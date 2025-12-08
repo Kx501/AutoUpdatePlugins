@@ -221,6 +221,7 @@ message:
   debugErrUrlResolveNoName: 'URL resolution error, project name not found: %1'
   debugErrNoID: 'Project ID not found: %1'
   urlInvalid: 'URL is invalid or irregular: %1'
+  networkErrorRetry: 'Network error, please wait %1 seconds...'
 
 ```
 

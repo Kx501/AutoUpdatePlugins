@@ -745,7 +745,9 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
             for(int i = 0; i < getConfig().getInt("fetchErrRetry", 4); i++){
                 if(i > 0){
                     try {
-                        Thread.sleep((getConfig().getInt("fetchErrRetryDelay", 5) + (i - 1) * 2L) * 1000L);
+                        long delay = getConfig().getInt("fetchErrRetryDelay", 5) + ((i - 1) * 2L);
+                        log(logLevel.NET_WARN, "[HTTP] "+ m.piece(m.networkErrorRetry, delay));
+                        Thread.sleep(delay * 1000L);
                     } catch (InterruptedException e) {
                         throw new RuntimeException(e);
                     }
@@ -939,6 +941,7 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
         public static String debugErrUrlResolveNoName;
         public static String debugErrNoID;
         public static String urlInvalid;
+        public static String networkErrorRetry;
 
         // 处理消息模板
         public static String piece(String message, Object in1){return message.replace("%1", ""+ in1);}
@@ -986,5 +989,6 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
         m.debugErrUrlResolveNoName = gm("debugErrUrlResolveNoName", "URL 解析错误, 未找到项目名称: %1");
         m.debugErrNoID = gm("debugErrNoID", "未找到项目 ID: %1");
         m.urlInvalid = gm("urlInvalid", "URL 无效或不规范: %1");
+        m.networkErrorRetry = gm("networkErrorRetry", "网络请求错误重试: %1");
     }
 }
