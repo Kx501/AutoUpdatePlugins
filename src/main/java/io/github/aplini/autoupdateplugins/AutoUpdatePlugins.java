@@ -390,15 +390,38 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                     log(logLevel.WARN, _nowParser + m.updateErrParsingDUrl);
                     continue;
                 }
-                dUrl = checkURL(dUrl);
-//                    outInfo(dUrl);
+
+                // 处理 URL 中的特殊字符
+                try {
+                    dUrl = new URI(dUrl.trim()
+                            .replace(" ", "%20"))
+                            .toASCIIString();
+                } catch (URISyntaxException e) {
+                    log(logLevel.WARN, "[URI] "+ m.piece(m.urlInvalid, dUrl));
+                    dUrl = null;
+                }
 
                 // 启用上一个更新记录与检查
                 String feature = "";
                 String pPath = "";
                 if(getConfig().getBoolean("enablePreviousUpdate", true)){
-                    // 获取文件大小
-                    feature = getFeature(dUrl);
+                    // 通过 HEAD 请求获取文件特征信息
+                    try(Response res = fetch(dUrl, true)){
+                        if(res != null){
+                            String contentLength = SEL(res.headers().get("Content-Length"), -1).toString();
+                            if(!contentLength.equals("-1")){
+                                feature = "CL_"+ contentLength;
+                            }
+                            String location = SEL(res.headers().get("Location"), "Invalid").toString();
+                            if(!location.equals("Invalid")){
+                                feature = "LH_"+ location.hashCode();
+                            }
+                        }
+                    }
+                    if(feature.isEmpty()){
+                        feature = "??_"+ nowDate().hashCode();
+                    }
+
                     // 是否与上一个版本相同
                     pPath = "previous." + li.toString().hashCode();
                     if (temp.get(pPath) != null) {
@@ -415,7 +438,7 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                 // 下载文件
                 if(!downloadFile(dUrl, c_tempPath)){
                     log(logLevel.WARN, m.updateErrDownload);
-                    delFile(c_tempPath);
+                    new File(c_tempPath).delete();
                     continue;
                 }
 
@@ -427,7 +450,7 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                 if(c_zipFileCheck && Pattern.compile(getConfig().getString("zipFileCheckList", "\\.(?:jar|zip)$")).matcher(c_file).find()){
                     if(!isJARFileIntact(c_tempPath)){
                         log(logLevel.WARN, m.updateZipFileCheck);
-                        delFile(c_tempPath);
+                        new File(c_tempPath).delete();
                         continue;
                     }
                 }
@@ -451,7 +474,7 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                     if(Objects.equals(tempFileHas, updatePathFileHas) || Objects.equals(tempFileHas, fileHash(c_filePath))){
                         log(logLevel.MARK, m.updateFileAlreadyLatest);
                         _fail --;
-                        delFile(c_tempPath);
+                        new File(c_tempPath).delete();
                         continue;
                     }
                 }
@@ -784,7 +807,7 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                 try (InputStream inputStream = res.body().byteStream();
                      OutputStream outputStream = new FileOutputStream(path)) {
 
-                    byte[] buffer = new byte[1024];
+                    byte[] buffer = new byte[256 * 1024];
                     int bytesRead;
                     while ((bytesRead = inputStream.read(buffer)) != -1) {
                         outputStream.write(buffer, 0, bytesRead);
@@ -794,23 +817,6 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                 log(logLevel.NET_WARN, "[HTTP] " + e.getMessage());
             }
             return false;
-        }
-
-        // 通过 HEAD 请求获取一些特征信息
-        public String getFeature(String url){
-            try(Response res = fetch(url, true)){
-                if(res == null) return "??_"+ nowDate().hashCode();
-
-                String contentLength = SEL(res.headers().get("Content-Length"), -1).toString();
-                if(!contentLength.equals("-1")){
-                    return "CL_"+ contentLength;
-                }
-                String location = SEL(res.headers().get("Location"), "Invalid").toString();
-                if(!location.equals("Invalid")){
-                    return "LH_"+ location.hashCode();
-                }
-            }
-            return "??_"+ nowDate().hashCode();
         }
 
         // 在插件更新过程中输出尽可能详细的日志
@@ -869,26 +875,6 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
             LocalDateTime now = LocalDateTime.now();
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
             return now.format(formatter);
-        }
-
-        // 处理 URL 中的特殊字符
-        public String checkURL(String url){
-            // 清除前后的空格
-            // 转义 URL 中的空格
-            try {
-                return new URI(url.trim()
-                        .replace(" ", "%20"))
-                        .toASCIIString();
-            } catch (URISyntaxException e) {
-                log(logLevel.WARN, "[URI] "+ m.piece(m.urlInvalid, url));
-                return null;
-            }
-        }
-
-        // 删除文件
-        public void delFile(String path){
-            new File(path).delete();
-            // outInfo(logLevel.WARN, _nowFile +"[FILE] 删除文件失败: "+ path);
         }
     }
 
