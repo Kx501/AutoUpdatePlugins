@@ -989,6 +989,6 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
         m.debugErrUrlResolveNoName = gm("debugErrUrlResolveNoName", "URL 解析错误, 未找到项目名称: %1");
         m.debugErrNoID = gm("debugErrNoID", "未找到项目 ID: %1");
         m.urlInvalid = gm("urlInvalid", "URL 无效或不规范: %1");
-        m.networkErrorRetry = gm("networkErrorRetry", "网络请求错误重试: %1");
+        m.networkErrorRetry = gm("networkErrorRetry", "网络错误, 等待 %1 秒...");
     }
 }
