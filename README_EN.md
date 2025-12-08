@@ -23,6 +23,7 @@ Download: https://modrinth.com/plugin/AutoUpdatePlugins
 - [x] Support for file integrity checking
 - [x] Cache last update, no duplicate downloads.
 - [x] No duplicate installation of updates
+- [x] Error retry mechanism
 - [x] Each update task can be configured individually.
 - [x] Configurable certificate validation
 - [x] Customizable output log level
@@ -85,6 +86,14 @@ zipFileCheckList: '\.(?:jar|zip)$'
 # Do not move to the update directory if the hash of the downloaded file matches the hash of the file to be updated in the update directory (or the file running on the server) (MD5)
 ignoreDuplicates: true
 
+# Whether to enable SSL authentication, usually do not turn it off
+sslVerify: true
+
+# Failed network request retry count
+fetchErrRetry: 4
+# Initial retry delay, +2 seconds per retry
+fetchErrRetryDelay: 5
+
 # Setting up a web proxy
 proxy:
   type: DIRECT # DIRECT | HTTP | SOCKS
@@ -94,7 +103,7 @@ proxy:
 # Edit request headers in HTTP requests
 setRequestProperty:
   - name: 'User-Agent'
-    value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36'
 
 # 启用哪些日志等级
 logLevel:
@@ -118,11 +127,11 @@ list:
 
 #  - file: 'EssentialsX.jar' # Github
 #    url: https://github.com/EssentialsX/Essentials
-#    get: 'EssentialsX-([0-9.]+)\.jar'  # If there is more than one file in the GitHub/Jenkins distribution, you need to match one of them, otherwise download the first one (using the regular expression
+#    get: 'EssentialsX-.*\.jar'  # If there is more than one file in the GitHub/Jenkins distribution, you need to match one of them, otherwise download the first one (using the regular expression
 
 #  - file: 'EssentialsXChat.jar' # Match different files in the same release
 #    url: https://github.com/EssentialsX/Essentials
-#    get: 'EssentialsXChat-([0-9.]+)\.jar'
+#    get: 'EssentialsXChat-.*\.jar'
 
 #  - file: 'Geyser-Spigot.jar' # URL
 #    url: https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/spigot
@@ -172,6 +181,46 @@ list:
 # boolean getPreRelease;    // Allow downloading of pre-releases, false by default. GitHub only.
 # boolean zipFileCheck;     // Enable zip file integrity checking
 # boolean ignoreDuplicates; // Turn off hash checking
+
+
+# Edit the messages the plugin may display here
+message:
+  updateCheckIntervalTooLow: '#### Update check interval too low will cause performance problems! ###'
+  timer: 'The update check will run after %1 seconds and repeat at %2 second intervals'
+  commandReloadOnUpdating: 'Currently running update, configuration reload will be postponed'
+  commandReloadOK: 'Reload completed'
+  commandRepeatedRunUpdate: 'There is already an unfinished update running'
+  commandUpdateStart: 'Update is running!'
+  commandFullLog: 'Full log:'
+  commandStopUpdateIng: 'Current updates are being stopped...'
+  stopUpdate: 'Too many requests'
+  repeatedRunUpdate: '### The update program started repeatedly or with errors? ###'
+  updateStart: '[### Start running automatic updates ##]'
+  configErrList: 'Error configuring update list? '
+  configErrUpdate: 'Update list configuration error? Item is empty.'
+  configErrMissing: 'Error updating list configuration? Missing basic configuration'
+  updateChecking: 'Checking for updates...'
+  updateErrParsingDUrl: 'Error parsing direct file links, will skip this update'
+  updateTempAlreadyLatest: '[Cached] file is already latest'
+  updateErrDownload: 'Error downloading file, will skip this update'
+  updateZipFileCheck: '[Zip integrity check] File is incomplete, will skip this update'
+  updateFileAlreadyLatest: 'File is already latest'
+  updateFulSizeDifference: 'Update completed [%1MB] -> [%2MB]'
+  updateFul: '[## Update All Complete ##]'
+  updateFulTime: 'Time taken: %1 seconds'
+  updateFulFail: 'Failed: %1,'
+  updateFulUpdate: 'Update: %1,'
+  updateFulOK: 'Success: %1'
+  updateFulNetRequest: 'Network Request: %1, '
+  updateFulDownloadFile: 'Downloading file: %1MB'
+  logReloadOK: 'Reload completed'
+  debugGetVersion: 'Found version: %1'
+  debugNoFileMatching: 'No file matching: %1'
+  debugNoRepositoryPath: 'Repository path not found: %1'
+  debugErrUrlResolveNoID: 'URL resolving error, plugin ID not included?'
+  debugErrUrlResolveNoName: 'URL resolution error, project name not found: %1'
+  debugErrNoID: 'Project ID not found: %1'
+  urlInvalid: 'URL is invalid or irregular: %1'
 
 ```
 

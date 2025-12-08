@@ -30,6 +30,11 @@ ignoreDuplicates: true
 # Whether to enable SSL authentication, usually do not turn it off
 sslVerify: true
 
+# Failed network request retry count
+fetchErrRetry: 4
+# Initial retry delay, +2 seconds per retry
+fetchErrRetryDelay: 5
+
 # Setting up a web proxy
 proxy:
   type: DIRECT # DIRECT | HTTP | SOCKS
@@ -39,7 +44,7 @@ proxy:
 # Edit request headers in HTTP requests
 setRequestProperty:
   - name: 'User-Agent'
-    value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36'
 
 # 启用哪些日志等级
 logLevel:
@@ -63,11 +68,11 @@ list:
 
 #  - file: 'EssentialsX.jar' # Github
 #    url: https://github.com/EssentialsX/Essentials
-#    get: 'EssentialsX-([0-9.]+)\.jar'  # If there is more than one file in the GitHub/Jenkins distribution, you need to match one of them, otherwise download the first one (using the regular expression
+#    get: 'EssentialsX-.*\.jar'  # If there is more than one file in the GitHub/Jenkins distribution, you need to match one of them, otherwise download the first one (using the regular expression
 
 #  - file: 'EssentialsXChat.jar' # Match different files in the same release
 #    url: https://github.com/EssentialsX/Essentials
-#    get: 'EssentialsXChat-([0-9.]+)\.jar'
+#    get: 'EssentialsXChat-.*\.jar'
 
 #  - file: 'Geyser-Spigot.jar' # URL
 #    url: https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/spigot

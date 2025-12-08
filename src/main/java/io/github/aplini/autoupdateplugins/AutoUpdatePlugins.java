@@ -689,7 +689,7 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
         }
 
         // 获取 HTTP 请求实例
-        public okhttp3.Call fetch(String url, boolean head){
+        public Response fetch(String url, boolean head){
             _allRequests ++;
             // HTTP 客户端
             OkHttpClient.Builder client = new OkHttpClient.Builder();
@@ -730,8 +730,7 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
             }
 
             // 请求实例
-            Request.Builder request = new Request.Builder()
-                    .url(url);
+            Request.Builder request = new Request.Builder().url(url);
             // 请求方式
             if(head){request.head();}
             // 添加请求头
@@ -743,16 +742,33 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                 }
             }
 
-            return client.build().newCall(request.build());
+            for(int i = 0; i < getConfig().getInt("fetchErrRetry", 4); i++){
+                if(i > 0){
+                    try {
+                        Thread.sleep((getConfig().getInt("fetchErrRetryDelay", 5) + (i - 1) * 2L) * 1000L);
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+                try{
+                    okhttp3.Call call = client.build().newCall(request.build());
+                    Response res = call.execute();
+                    if (!res.isSuccessful()) {
+                        continue;
+                    }
+                    return res;
+                } catch (IOException e) {
+                    log(logLevel.NET_WARN, "[HTTP] " + e.getMessage());
+                }
+            }
+            return null;
         }
 
         // http 请求获取字符串
         public String httpGet(String url) {
-            try (Response response = fetch(url, false).execute()) {
-                if (!response.isSuccessful()) {
-                    return null;
-                }
-                return response.body().string();
+            try(Response res = fetch(url, false)){
+                if(res == null) return null;
+                return res.body().string();
             } catch (IOException e) {
                 log(logLevel.NET_WARN, "[HTTP] " + e.getMessage());
             }
@@ -761,11 +777,9 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
 
         // 下载文件到指定目录
         public boolean downloadFile(String url, String path) {
-            try (Response response = fetch(url, false).execute()) {
-                if(!response.isSuccessful()){
-                    return false;
-                }
-                try (InputStream inputStream = response.body().byteStream();
+            try(Response res = fetch(url, false)){
+                if(res == null) return false;
+                try (InputStream inputStream = res.body().byteStream();
                      OutputStream outputStream = new FileOutputStream(path)) {
 
                     byte[] buffer = new byte[1024];
@@ -774,29 +788,25 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                         outputStream.write(buffer, 0, bytesRead);
                     }
                 }
-                return true;
             } catch (IOException e) {
-                log(logLevel.NET_WARN, "[HTTP] "+ e.getMessage());
+                log(logLevel.NET_WARN, "[HTTP] " + e.getMessage());
             }
             return false;
         }
 
         // 通过 HEAD 请求获取一些特征信息
         public String getFeature(String url){
-            try (Response response = fetch(url, true).execute()) {
-                if(!response.isSuccessful()){
-                    return "??_"+ nowDate().hashCode();
-                }
-                String contentLength = SEL(response.headers().get("Content-Length"), -1).toString();
+            try(Response res = fetch(url, true)){
+                if(res == null) return "??_"+ nowDate().hashCode();
+
+                String contentLength = SEL(res.headers().get("Content-Length"), -1).toString();
                 if(!contentLength.equals("-1")){
                     return "CL_"+ contentLength;
                 }
-                String location = SEL(response.headers().get("Location"), "Invalid").toString();
+                String location = SEL(res.headers().get("Location"), "Invalid").toString();
                 if(!location.equals("Invalid")){
                     return "LH_"+ location.hashCode();
                 }
-            } catch (IOException e) {
-                log(logLevel.NET_WARN, "[HTTP.HEAD] "+ e.getMessage());
             }
             return "??_"+ nowDate().hashCode();
         }

@@ -30,6 +30,11 @@ ignoreDuplicates: true
 # 是否启用 SSL 验证, 通常情况请勿关闭
 sslVerify: true
 
+# 网络请求失败重试次数
+fetchErrRetry: 4
+# 初始重试延迟, 每次重试 + 2s
+fetchErrRetryDelay: 5
+
 # 设置网络代理
 proxy:
   type: DIRECT # DIRECT | HTTP | SOCKS
@@ -39,7 +44,7 @@ proxy:
 # HTTP 请求中编辑请求头
 setRequestProperty:
   - name: 'User-Agent'
-    value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36'
 
 # 启用哪些日志等级
 logLevel:
@@ -63,11 +68,11 @@ list:
 
 #  - file: 'EssentialsX.jar' # Github
 #    url: https://github.com/EssentialsX/Essentials
-#    get: 'EssentialsX-([0-9.]+)\.jar'  # 如果 GitHub/Jenkins 发布中存在多个文件, 则需要匹配其中一个, 否则下载第一个 (使用正则表达式
+#    get: 'EssentialsX-.*\.jar'  # 如果 GitHub/Jenkins 发布中存在多个文件, 则需要匹配其中一个, 否则下载第一个 (使用正则表达式
 
 #  - file: 'EssentialsXChat.jar' # 匹配相同发布中的不同文件
 #    url: https://github.com/EssentialsX/Essentials
-#    get: 'EssentialsXChat-([0-9.]+)\.jar'
+#    get: 'EssentialsXChat-.*\.jar'
 
 #  - file: 'Geyser-Spigot.jar' # URL
 #    url: https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/spigot
