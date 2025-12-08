@@ -807,7 +807,7 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                 try (InputStream inputStream = res.body().byteStream();
                      OutputStream outputStream = new FileOutputStream(path)) {
 
-                    byte[] buffer = new byte[256 * 1024];
+                    byte[] buffer = new byte[512 * 1024];
                     int bytesRead;
                     while ((bytesRead = inputStream.read(buffer)) != -1) {
                         outputStream.write(buffer, 0, bytesRead);
