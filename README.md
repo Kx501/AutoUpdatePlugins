@@ -20,6 +20,7 @@
 - [x] 根据插件发布页自动找到下载链接
   - `GitHub, Jenkins, Spigot, Modrinth, Bukkit, 鬼斩构建站 v2, MineBBS, CurseForge`
     - 支持下载 GitHub 中的预发布版本
+    - 支持指定 Modrinth 中的平台
 - [x] 支持匹配相同发布下的不同文件
   - `GitHub, Jenkins, Modrinth`
 - [x] 支持文件完整性检查

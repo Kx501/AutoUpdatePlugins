@@ -18,6 +18,7 @@ Download: https://modrinth.com/plugin/AutoUpdatePlugins
 - [x] Automatically find download links based on plugin release page
     - `GitHub, Jenkins, Spigot, Modrinth, Bukkit, Ghost Chop Build Station v2, MineBBS, CurseForge`.
         - Support downloading pre-releases from GitHub.
+        - Support for specifying platforms in Modrinth
 - [x] Support matching different files under the same release
     - `GitHub, Jenkins, Modrinth`.
 - [x] Support for file integrity checking
