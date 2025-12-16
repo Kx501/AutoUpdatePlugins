@@ -123,7 +123,7 @@ logLevel:
 list:
 
   - file: 'AutoUpdatePlugins自动更新.jar'
-    url: https://github.com/ApliNi/AutoUpdatePlugins/
+    url: https://modrinth.com/plugin/autoupdateplugins
 
 ### 示例配置 ### 测试时注意 Yaml 格式
 
