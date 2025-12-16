@@ -145,7 +145,7 @@ list:
 #  - file: 'CoreProtect.jar' # Modrinth
 #    url: https://modrinth.com/plugin/coreprotect/
 
-#  - file: 'test.jar'
+#  - file: 'simple-voice-chat.jar'
 #    url: https://modrinth.com/plugin/simple-voice-chat
 #    loader: paper # Specify platform
 
