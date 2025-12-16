@@ -145,6 +145,10 @@ list:
 #  - file: 'CoreProtect.jar' # Modrinth
 #    url: https://modrinth.com/plugin/coreprotect/
 
+#  - file: 'test.jar'
+#    url: https://modrinth.com/plugin/simple-voice-chat
+#    loader: paper # Specify platform
+
 #  - file: 'UseTranslatedNames.jar'
 #    url: https://modrinth.com/plugin/usetranslatednames
 
@@ -178,6 +182,7 @@ list:
 # String filePath;          // The final installation path, used globally by default.
 # String path;              // Overriding both updatePath and filePath configurations
 # String get;               // Regular expression to select the specified file, first one is selected by default. GitHub, Jenkins, Modrinth only.
+# String loader;            // Match platform tags, Modrinth only
 # boolean getPreRelease;    // Allow downloading of pre-releases, false by default. GitHub only.
 # boolean zipFileCheck;     // Enable zip file integrity checking
 # boolean ignoreDuplicates; // Turn off hash checking

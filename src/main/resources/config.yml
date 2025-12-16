@@ -86,6 +86,10 @@ list:
 #  - file: 'CoreProtect.jar' # Modrinth
 #    url: https://modrinth.com/plugin/coreprotect/
 
+#  - file: 'test.jar'
+#    url: https://modrinth.com/plugin/simple-voice-chat
+#    loader: paper # 指定平台
+
 #  - file: 'UseTranslatedNames翻译物品名.jar'
 #    url: https://modrinth.com/plugin/usetranslatednames
 
@@ -119,6 +123,7 @@ list:
 # String filePath;          // 最终安装路径, 默认使用全局配置
 # String path;              // 同时覆盖 updatePath 和 filePath 配置
 # String get;               // 选择指定文件的正则表达式, 默认选择第一个. 仅限 GitHub, Jenkins, Modrinth
+# String loader;            // 匹配平台标签, 仅限 Modrinth
 # boolean getPreRelease;    // 允许下载预发布版本, 默认 false. 仅限 GitHub
 # boolean zipFileCheck;     // 启用 zip 文件完整性检查
 # boolean ignoreDuplicates; // 关闭哈希检查

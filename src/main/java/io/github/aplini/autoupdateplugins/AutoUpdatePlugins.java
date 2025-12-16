@@ -265,6 +265,7 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
         String c_updatePath;        // 更新存放路径, 默认使用全局配置
         String c_filePath;          // 最终安装路径, 默认使用全局配置
         String c_get;               // 查找单个文件的正则表达式, 默认选择第一个. 仅限 GitHub, Jenkins, Modrinth
+        String c_loader;            // 插件加载器, 仅限 Modrinth
         boolean c_zipFileCheck;     // 启用 zip 文件完整性检查, 默认默认使用全局配置或 true
         boolean c_getPreRelease;    // 允许下载预发布版本, 默认 false. 仅限 GitHub
 
@@ -379,6 +380,7 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                 }
 
                 c_get = (String) SEL(li.get("get"), "");
+                c_loader = ((String) SEL(li.get("loader"), "")).toLowerCase();
                 c_zipFileCheck = (boolean) SEL(li.get("zipFileCheck"), getConfig().getBoolean("zipFileCheck", true));
                 c_getPreRelease = (boolean) SEL(li.get("getPreRelease"), false);
 
@@ -386,7 +388,7 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                 log(logLevel.DEBUG, m.updateChecking);
 
                 // 下载文件到缓存目录
-                String dUrl = getFileUrl(c_url, c_get);
+                String dUrl = getFileUrl(c_url, c_get, c_loader);
                 if(dUrl == null){
                     log(logLevel.WARN, _nowParser + m.updateErrParsingDUrl);
                     continue;
@@ -530,7 +532,7 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
         }
 
         // 获取部分文件直链
-        public  String getFileUrl(String _url, String matchFileName) {
+        public  String getFileUrl(String _url, String matchFileName, String matchLoader) {
             // 移除 URL 最后的斜杠
             String url = _url.replaceAll("/$", "");
 
@@ -615,6 +617,15 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                     // 遍历版本列表
                     for(Object _version : versions){
                         Map<?, ?> version = (Map<?, ?>) _version;
+                        // 检查标签 loaders
+                        if(!matchLoader.isEmpty()){
+                            ArrayList<String> loaders = new ArrayList<>();
+                            for(Object loader : (ArrayList<?>) version.get("loaders")){
+                                loaders.add(((String) loader).toLowerCase());
+                            }
+                            // 标签不匹配时跳过
+                            if(!loaders.contains(matchLoader)){continue;}
+                        }
                         ArrayList<?> files = (ArrayList<?>) version.get("files");
                         // 遍历发布文件列表
                         for(Object _file : files){
