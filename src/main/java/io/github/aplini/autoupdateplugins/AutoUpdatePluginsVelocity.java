@@ -68,6 +68,52 @@ public class AutoUpdatePluginsVelocity {
     public void onInit(ProxyInitializeEvent event) {
         ensureDefaultConfigs();
         loadConfig();
+
+        // 禁用证书验证
+        if (getConfigBoolean("disableCertificateVerification", false)) {
+            // 创建一个 TrustManager, 它将接受任何证书
+            TrustManager[] trustAllCerts = new TrustManager[] {
+                    new X509TrustManager() {
+                        public X509Certificate[] getAcceptedIssuers() {
+                            return null;
+                        }
+
+                        public void checkClientTrusted(X509Certificate[] certs, String authType) {
+                        }
+
+                        public void checkServerTrusted(X509Certificate[] certs, String authType) {
+                        }
+                    }
+            };
+            // 获取默认的 SSLContext
+            SSLContext sslContext;
+            try {
+                sslContext = SSLContext.getInstance("TLS");
+                sslContext.init(null, trustAllCerts, new SecureRandom());
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+            // 设置默认的 SSLSocketFactory
+            try {
+                javax.net.ssl.HttpsURLConnection.setDefaultSSLSocketFactory(sslContext.getSocketFactory());
+            } catch (Exception e) {
+                logger.warn("[AUP] 设置默认 SSL Socket Factory 失败: {}", e.getMessage());
+            }
+        }
+
+        // 检查过时的配置
+        if (getConfigBoolean("debugLog", false)) {
+            logger.warn("[AUP] `debugLog` 配置已弃用, 请使用 `logLevel` - 启用哪些日志等级");
+        }
+
+        // 检查缺失的配置
+        if (getConfig("setRequestProperty") == null) {
+            logger.warn("[AUP] 缺少配置 `setRequestProperty` - HTTP 请求中编辑请求头");
+        }
+        if (getConfig("message") == null) {
+            logger.warn("[AUP] 缺少配置 `message` - 插件消息配置");
+        }
+
         scheduleTasks();
         registerCommands();
         logger.info("[AUP] Velocity 初始化完成");
@@ -283,6 +329,18 @@ public class AutoUpdatePluginsVelocity {
         return def;
     }
 
+    private int getConfigInt(String key, int def) {
+        Object v = getConfig(key);
+        if (v instanceof Number)
+            return ((Number) v).intValue();
+        if (v instanceof String)
+            try {
+                return Integer.parseInt((String) v);
+            } catch (Exception ignored) {
+            }
+        return def;
+    }
+
     // 更新逻辑
     private class updatePlugins extends TimerTask {
         String _fileName = "[???] ";
@@ -300,32 +358,40 @@ public class AutoUpdatePluginsVelocity {
         String c_updatePath;
         String c_filePath;
         String c_get;
+        String c_loader; // 插件加载器, 仅限 Modrinth
         boolean c_zipFileCheck;
         boolean c_getPreRelease;
 
         public void run() {
+            // 新线程
             future = CompletableFuture.runAsync(() -> {
+                // 防止重复运行
                 if (lock && !getConfigBoolean("disableLook", false)) {
                     log(logLevel.WARN, "### 更新程序重复启动或出现错误? ###");
                     return;
                 }
                 lock = true;
 
+                // 运行更新
                 runUpdate();
 
+                // 处理统计信息
                 log(logLevel.INFO, "[## 更新全部完成 ##]");
                 log(logLevel.INFO, "  - 耗时: " + Math.round((System.nanoTime() - _startTime) / 1_000_000_000.0) + " 秒");
 
                 String st = "  - ";
-                if (_fail != 0)
+                if (_fail != 0) {
                     st += "失败: " + _fail + ", ";
-                if (_success != 0)
+                }
+                if (_success != 0) {
                     st += "更新: " + _success + ", ";
+                }
                 log(logLevel.INFO, st + "成功: " + _updateFul);
 
-                log(logLevel.INFO, "  - 网络请求: " + _allRequests);
-                log(logLevel.INFO, "  - 下载文件: " + String.format("%.2f", _allFileSize / 1048576) + "MB");
+                log(logLevel.INFO, "  - 网络请求: " + _allRequests + ", 下载文件: "
+                        + String.format("%.2f", _allFileSize / 1048576) + "MB");
 
+                // 运行被推迟的配置重载
                 if (awaitReload) {
                     awaitReload = false;
                     loadConfig();
@@ -338,14 +404,15 @@ public class AutoUpdatePluginsVelocity {
         }
 
         public void runUpdate() {
-            logList = new ArrayList<>();
-            _startTime = System.nanoTime();
+
+            logList = new ArrayList<>(); // 清空上一份日志
+            _startTime = System.nanoTime(); // 记录运行时间
 
             log(logLevel.INFO, "[## 开始运行自动更新 ##]");
 
             List<?> list = (List<?>) getConfig("list");
             if (list == null) {
-                log(logLevel.WARN, "更新列表配置错误?");
+                log(logLevel.WARN, "更新列表配置错误? ");
                 return;
             }
 
@@ -354,6 +421,8 @@ public class AutoUpdatePluginsVelocity {
                     log(logLevel.INFO, "已停止当前更新");
                     return;
                 }
+
+                // 开始运行一个更新
 
                 _fail++;
                 _updateFul++;
@@ -364,6 +433,7 @@ public class AutoUpdatePluginsVelocity {
                     continue;
                 }
 
+                // 检查基础配置
                 c_file = String.valueOf(sel(li.get("file"), ""));
                 c_url = String.valueOf(sel(li.get("url"), "")).trim();
                 if (c_file.isEmpty() || c_url.isEmpty()) {
@@ -371,6 +441,7 @@ public class AutoUpdatePluginsVelocity {
                     continue;
                 }
 
+                // 获取用于显示日志的插件名称
                 Matcher tempMatcher = Pattern.compile("([^/\\\\]+)\\..*$").matcher(c_file);
                 if (tempMatcher.find()) {
                     _fileName = "[" + tempMatcher.group(1) + "] ";
@@ -378,18 +449,23 @@ public class AutoUpdatePluginsVelocity {
                     _fileName = "[" + c_file + "] ";
                 }
 
+                // 如果 file 配置中包含路径, 则自动提取并设置 path 参数
                 tempMatcher = Pattern.compile("(.*/|.*\\\\)([^/\\\\]+)$").matcher(c_file);
-                if (tempMatcher.find()) {
+                if (tempMatcher.find()) { // windows 下的反斜杠路径
                     getPath(tempMatcher.group(1));
                     c_updatePath = c_file;
                     c_filePath = c_file;
                     c_tempPath = getPath(getConfigString("tempPath", "./plugins/AutoUpdatePlugins/temp/"))
                             + tempMatcher.group(2);
-                } else if (li.get("path") != null) {
+                }
+                // path 参数将同时设置 c_updatePath 和 c_filePath
+                else if (li.get("path") != null) {
                     c_updatePath = getPath(String.valueOf(li.get("path"))) + c_file;
                     c_filePath = c_updatePath;
                     c_tempPath = getPath(getConfigString("tempPath", "./plugins/AutoUpdatePlugins/temp/")) + c_file;
-                } else {
+                }
+                // 使用全局配置
+                else {
                     c_updatePath = getPath(String
                             .valueOf(sel(li.get("updatePath"), getConfigString("updatePath", "./plugins/update/"))))
                             + c_file;
@@ -400,22 +476,51 @@ public class AutoUpdatePluginsVelocity {
                 }
 
                 c_get = String.valueOf(sel(li.get("get"), ""));
+                c_loader = String.valueOf(sel(li.get("loader"), "")).toLowerCase();
                 c_zipFileCheck = (boolean) sel(li.get("zipFileCheck"), getConfigBoolean("zipFileCheck", true));
                 c_getPreRelease = (boolean) sel(li.get("getPreRelease"), false);
 
                 log(logLevel.DEBUG, "正在检查更新...");
 
-                String dUrl = getFileUrl(c_url, c_get);
+                String dUrl = getFileUrl(c_url, c_get, c_loader);
                 if (dUrl == null) {
                     log(logLevel.WARN, _nowParser + "解析文件直链时出现错误, 将跳过此更新");
                     continue;
                 }
-                dUrl = checkURL(dUrl);
 
+                // 处理 URL 中的特殊字符
+                try {
+                    dUrl = new URI(dUrl.trim()
+                            .replace(" ", "%20"))
+                            .toASCIIString();
+                } catch (URISyntaxException e) {
+                    log(logLevel.WARN, "[URI] URL 无效或不规范: " + dUrl);
+                    dUrl = null;
+                }
+                if (dUrl == null) {
+                    continue;
+                }
+
+                // 启用上一个更新记录与检查
                 String feature = "";
                 String pPath = "";
                 if (getConfigBoolean("enablePreviousUpdate", true)) {
-                    feature = getFeature(dUrl);
+                    // 通过 HEAD 请求获取文件特征信息
+                    try (okhttp3.Response res = fetch(dUrl, true)) {
+                        if (res != null) {
+                            String contentLength = String.valueOf(sel(res.headers().get("Content-Length"), -1));
+                            if (!contentLength.equals("-1")) {
+                                feature = "CL_" + contentLength;
+                            }
+                            String location = String.valueOf(sel(res.headers().get("Location"), "Invalid"));
+                            if (!location.equals("Invalid")) {
+                                feature = "LH_" + location.hashCode();
+                            }
+                        }
+                    }
+                    if (feature.isEmpty()) {
+                        feature = "??_" + nowDate().hashCode();
+                    }
                     pPath = "previous." + li.toString().hashCode();
                     if (temp.get(pPath) != null) {
                         @SuppressWarnings("unchecked")
@@ -429,12 +534,14 @@ public class AutoUpdatePluginsVelocity {
                     }
                 }
 
+                // 下载文件到缓存目录
                 if (!downloadFile(dUrl, c_tempPath)) {
                     log(logLevel.WARN, "下载文件时出现异常, 将跳过此更新");
                     delFile(c_tempPath);
                     continue;
                 }
 
+                // 记录文件大小
                 float fileSize = new File(c_tempPath).length();
                 _allFileSize += fileSize;
 
@@ -447,7 +554,9 @@ public class AutoUpdatePluginsVelocity {
                     }
                 }
 
+                // 此时已确保文件(信息)正常
                 if (getConfigBoolean("enablePreviousUpdate", true)) {
+                    // 更新数据
                     @SuppressWarnings("unchecked")
                     Map<String, Object> p = (Map<String, Object>) temp.computeIfAbsent(pPath, k -> new HashMap<>());
                     p.put("file", c_file);
@@ -472,9 +581,10 @@ public class AutoUpdatePluginsVelocity {
                 float oldFileSize = new File(c_updatePath).exists() ? new File(c_updatePath).length()
                         : new File(c_filePath).length();
 
+                // 移动到更新目录
                 try {
                     Files.move(Path.of(c_tempPath), Path.of(c_updatePath), StandardCopyOption.REPLACE_EXISTING);
-                } catch (Exception e) {
+                } catch (java.io.IOException e) {
                     log(logLevel.WARN, e.getMessage());
                 }
 
@@ -484,12 +594,13 @@ public class AutoUpdatePluginsVelocity {
                 _success++;
                 _fail--;
 
+                // 这一部分可以删除, 但为了防止未知的错误影响日志内容
                 _fileName = "[???] ";
                 _nowParser = "[???] ";
             }
         }
 
-        // 复制所有工具方法
+        // 尝试打开 jar 文件以判断文件是否完整
         public boolean isJARFileIntact(String filePath) {
             try (JarFile jarFile = new JarFile(new File(filePath))) {
                 jarFile.close();
@@ -501,17 +612,19 @@ public class AutoUpdatePluginsVelocity {
             }
         }
 
+        // 计算文件哈希
         public String fileHash(String filePath) {
             try {
                 byte[] data = Files.readAllBytes(Paths.get(filePath));
                 byte[] hash = MessageDigest.getInstance("MD5").digest(data);
                 return new BigInteger(1, hash).toString(16);
             } catch (Exception e) {
-                return "null";
+                // outInfo(logLevel.WARN, e.getMessage()); // 文件不存在时会输出异常
             }
+            return "null";
         }
 
-        public String getFileUrl(String _url, String matchFileName) {
+        public String getFileUrl(String _url, String matchFileName, String matchLoader) {
             String url = _url.replaceAll("/$", "");
 
             if (url.contains("://github.com/")) {
@@ -588,9 +701,22 @@ public class AutoUpdatePluginsVelocity {
                     if (data == null)
                         return null;
                     ArrayList<?> versions = new com.google.gson.Gson().fromJson(data, ArrayList.class);
+                    // 遍历版本列表
                     for (Object _version : versions) {
                         Map<?, ?> version = (Map<?, ?>) _version;
+                        // 检查标签 loaders
+                        if (!matchLoader.isEmpty()) {
+                            ArrayList<String> loaders = new ArrayList<>();
+                            for (Object loader : (ArrayList<?>) version.get("loaders")) {
+                                loaders.add(String.valueOf(loader).toLowerCase());
+                            }
+                            // 标签不匹配时跳过
+                            if (!loaders.contains(matchLoader)) {
+                                continue;
+                            }
+                        }
                         ArrayList<?> files = (ArrayList<?>) version.get("files");
+                        // 遍历发布文件列表
                         for (Object _file : files) {
                             Map<?, ?> file = (Map<?, ?>) _file;
                             String fileName = String.valueOf(file.get("filename"));
@@ -670,20 +796,26 @@ public class AutoUpdatePluginsVelocity {
             return in1;
         }
 
-        public okhttp3.Call fetch(String url, boolean head) {
+        public okhttp3.Response fetch(String url, boolean head) {
             _allRequests++;
+            // HTTP 客户端
             okhttp3.OkHttpClient.Builder client = new okhttp3.OkHttpClient.Builder();
 
+            // 启用网络代理
             if (!getConfigString("proxy.type", "DIRECT").equals("DIRECT")) {
-                client.proxy(new Proxy(
+                Proxy proxy = new Proxy(
                         Proxy.Type.valueOf(getConfigString("proxy.type", "HTTP")),
                         new InetSocketAddress(
                                 getConfigString("proxy.host", "127.0.0.1"),
-                                (int) getConfigLong("proxy.port", 7890))));
+                                (int) getConfigLong("proxy.port", 7890)));
+                client.proxy(proxy);
             }
 
+            // 禁用 SSL 验证
             if (!getConfigBoolean("sslVerify", true)) {
+                // 设置自定义的 TrustManager 和 HostnameVerifier
                 try {
+                    // 创建一个信任所有证书的信任管理器
                     X509TrustManager trustManager = new X509TrustManager() {
                         @Override
                         public void checkClientTrusted(X509Certificate[] chain, String authType) {
@@ -701,6 +833,7 @@ public class AutoUpdatePluginsVelocity {
 
                     SSLContext sslContext = SSLContext.getInstance("SSL");
                     sslContext.init(null, new TrustManager[] { trustManager }, new SecureRandom());
+                    // 使用信任所有证书的 SSLSocketFactory
                     client.sslSocketFactory(sslContext.getSocketFactory(), trustManager);
 
                 } catch (Exception e) {
@@ -708,10 +841,13 @@ public class AutoUpdatePluginsVelocity {
                 }
             }
 
+            // 请求实例
             okhttp3.Request.Builder request = new okhttp3.Request.Builder().url(url);
-            if (head)
+            // 请求方式
+            if (head) {
                 request.head();
-
+            }
+            // 添加请求头
             List<?> list = (List<?>) getConfig("setRequestProperty");
             if (list != null) {
                 for (Object _li : list) {
@@ -720,62 +856,75 @@ public class AutoUpdatePluginsVelocity {
                 }
             }
 
-            return client.build().newCall(request.build());
+            okhttp3.Response res = null;
+            for (int i = 0; i < getConfigInt("fetchErrRetry", 4); i++) {
+                if (i > 0) {
+                    try {
+                        long delay = getConfigInt("fetchErrRetryDelay", 5) + ((i - 1) * 2L);
+                        log(logLevel.NET_WARN, "[HTTP] 网络错误, 等待 " + delay + " 秒...");
+                        Thread.sleep(delay * 1000L);
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+                try {
+                    okhttp3.Call call = client.build().newCall(request.build());
+                    res = call.execute();
+                    if (!res.isSuccessful()) {
+                        res.close();
+                        continue;
+                    }
+                    return res;
+                } catch (java.io.IOException e) {
+                    log(logLevel.NET_WARN, "[HTTP] " + e.getMessage());
+                }
+            }
+            if (res != null)
+                res.close();
+            return null;
         }
 
         public String httpGet(String url) {
-            try (okhttp3.Response response = fetch(url, false).execute()) {
-                if (!response.isSuccessful()) {
+            try (okhttp3.Response res = fetch(url, false)) {
+                if (res == null)
                     return null;
-                }
-                return response.body().string();
-            } catch (Exception e) {
+                String str = res.body().string();
+                res.close();
+                return str;
+            } catch (java.io.IOException e) {
                 log(logLevel.NET_WARN, "[HTTP] " + e.getMessage());
             }
             return null;
         }
 
         public boolean downloadFile(String url, String path) {
-            try (okhttp3.Response response = fetch(url, false).execute()) {
-                if (!response.isSuccessful()) {
+            try (okhttp3.Response res = fetch(url, false)) {
+                if (res == null)
                     return false;
-                }
-                try (InputStream inputStream = response.body().byteStream();
+                try (InputStream inputStream = res.body().byteStream();
                         OutputStream outputStream = new FileOutputStream(path)) {
 
-                    byte[] buffer = new byte[1024];
+                    byte[] buffer = new byte[512 * 1024];
                     int bytesRead;
                     while ((bytesRead = inputStream.read(buffer)) != -1) {
                         outputStream.write(buffer, 0, bytesRead);
                     }
                 }
+                res.close();
                 return true;
-            } catch (Exception e) {
+            } catch (java.io.IOException e) {
                 log(logLevel.NET_WARN, "[HTTP] " + e.getMessage());
             }
             return false;
         }
 
-        public String getFeature(String url) {
-            try (okhttp3.Response response = fetch(url, true).execute()) {
-                if (!response.isSuccessful()) {
-                    return "??_" + nowDate().hashCode();
-                }
-                String contentLength = String.valueOf(sel(response.headers().get("Content-Length"), -1));
-                if (!contentLength.equals("-1")) {
-                    return "CL_" + contentLength;
-                }
-                String location = String.valueOf(sel(response.headers().get("Location"), "Invalid"));
-                if (!location.equals("Invalid")) {
-                    return "LH_" + location.hashCode();
-                }
-            } catch (Exception e) {
-                log(logLevel.NET_WARN, "[HTTP.HEAD] " + e.getMessage());
-            }
-            return "??_" + nowDate().hashCode();
-        }
-
+        // 在插件更新过程中输出尽可能详细的日志
         public void log(logLevel level, String text) {
+
+            if (text.isEmpty())
+                return;
+
+            // 获取用户启用了哪些日志等级
             List<String> userLogLevel = getConfigStringList("logLevel");
             if (userLogLevel.isEmpty()) {
                 userLogLevel = List.of("DEBUG", "MARK", "INFO", "WARN", "NET_WARN");
@@ -784,20 +933,22 @@ public class AutoUpdatePluginsVelocity {
             if (userLogLevel.contains(level.name)) {
                 switch (level.name) {
                     case "DEBUG":
-                        logger.info(_fileName + text);
+                        logger.info("[AUP] " + _fileName + text);
                         break;
                     case "INFO":
-                        logger.info(text);
+                        logger.info("[AUP] " + text);
                         break;
                     case "MARK":
                         logger.info("[AUP] " + _fileName + text);
                         break;
                     case "WARN", "NET_WARN":
-                        logger.warn(_fileName + text);
+                        logger.warn("[AUP] " + _fileName + text);
                         break;
                 }
             }
 
+            // 根据日志等级添加样式代码, 并记录到 logList
+            // 非 INFO 日志添加 _nowFile 文本
             logList.add(level.color + (level.name.equals("INFO") ? "" : _fileName) + text);
         }
 
@@ -817,19 +968,11 @@ public class AutoUpdatePluginsVelocity {
             }
         }
 
+        // 获取已格式化的时间
         public String nowDate() {
             LocalDateTime now = LocalDateTime.now();
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
             return now.format(formatter);
-        }
-
-        public String checkURL(String url) {
-            try {
-                return new URI(url.trim().replace(" ", "%20")).toASCIIString();
-            } catch (URISyntaxException e) {
-                log(logLevel.WARN, "[URI] URL 无效或不规范: " + url);
-                return null;
-            }
         }
 
         public void delFile(String path) {
