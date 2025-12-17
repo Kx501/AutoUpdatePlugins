@@ -2,6 +2,7 @@ package io.github.aplini.autoupdateplugins;
 
 import com.google.common.io.ByteStreams;
 import com.google.gson.Gson;
+import okhttp3.Call;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -76,18 +77,18 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
             // 创建一个 TrustManager, 它将接受任何证书
             TrustManager[] trustAllCerts = new TrustManager[] {
                     new X509TrustManager() {
-                        public java.security.cert.X509Certificate[] getAcceptedIssuers() {
+                        public X509Certificate[] getAcceptedIssuers() {
                             return null;
                         }
-                        public void checkClientTrusted(java.security.cert.X509Certificate[] certs, String authType) {}
-                        public void checkServerTrusted(java.security.cert.X509Certificate[] certs, String authType) {}
+                        public void checkClientTrusted(X509Certificate[] certs, String authType) {}
+                        public void checkServerTrusted(X509Certificate[] certs, String authType) {}
                     }
             };
             // 获取默认的 SSLContext
             SSLContext sslContext;
             try {
                 sslContext = SSLContext.getInstance("TLS");
-                sslContext.init(null, trustAllCerts, new java.security.SecureRandom());
+                sslContext.init(null, trustAllCerts, new SecureRandom());
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
@@ -264,6 +265,7 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
         String c_updatePath;        // 更新存放路径, 默认使用全局配置
         String c_filePath;          // 最终安装路径, 默认使用全局配置
         String c_get;               // 查找单个文件的正则表达式, 默认选择第一个. 仅限 GitHub, Jenkins, Modrinth
+        String c_loader;            // 插件加载器, 仅限 Modrinth
         boolean c_zipFileCheck;     // 启用 zip 文件完整性检查, 默认默认使用全局配置或 true
         boolean c_getPreRelease;    // 允许下载预发布版本, 默认 false. 仅限 GitHub
 
@@ -378,6 +380,7 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                 }
 
                 c_get = (String) SEL(li.get("get"), "");
+                c_loader = ((String) SEL(li.get("loader"), "")).toLowerCase();
                 c_zipFileCheck = (boolean) SEL(li.get("zipFileCheck"), getConfig().getBoolean("zipFileCheck", true));
                 c_getPreRelease = (boolean) SEL(li.get("getPreRelease"), false);
 
@@ -385,20 +388,43 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                 log(logLevel.DEBUG, m.updateChecking);
 
                 // 下载文件到缓存目录
-                String dUrl = getFileUrl(c_url, c_get);
+                String dUrl = getFileUrl(c_url, c_get, c_loader);
                 if(dUrl == null){
                     log(logLevel.WARN, _nowParser + m.updateErrParsingDUrl);
                     continue;
                 }
-                dUrl = checkURL(dUrl);
-//                    outInfo(dUrl);
+
+                // 处理 URL 中的特殊字符
+                try {
+                    dUrl = new URI(dUrl.trim()
+                            .replace(" ", "%20"))
+                            .toASCIIString();
+                } catch (URISyntaxException e) {
+                    log(logLevel.WARN, "[URI] "+ m.piece(m.urlInvalid, dUrl));
+                    dUrl = null;
+                }
 
                 // 启用上一个更新记录与检查
                 String feature = "";
                 String pPath = "";
                 if(getConfig().getBoolean("enablePreviousUpdate", true)){
-                    // 获取文件大小
-                    feature = getFeature(dUrl);
+                    // 通过 HEAD 请求获取文件特征信息
+                    try(Response res = fetch(dUrl, true)){
+                        if(res != null){
+                            String contentLength = SEL(res.headers().get("Content-Length"), -1).toString();
+                            if(!contentLength.equals("-1")){
+                                feature = "CL_"+ contentLength;
+                            }
+                            String location = SEL(res.headers().get("Location"), "Invalid").toString();
+                            if(!location.equals("Invalid")){
+                                feature = "LH_"+ location.hashCode();
+                            }
+                        }
+                    }
+                    if(feature.isEmpty()){
+                        feature = "??_"+ nowDate().hashCode();
+                    }
+
                     // 是否与上一个版本相同
                     pPath = "previous." + li.toString().hashCode();
                     if (temp.get(pPath) != null) {
@@ -415,7 +441,7 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                 // 下载文件
                 if(!downloadFile(dUrl, c_tempPath)){
                     log(logLevel.WARN, m.updateErrDownload);
-                    delFile(c_tempPath);
+                    new File(c_tempPath).delete();
                     continue;
                 }
 
@@ -427,7 +453,7 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                 if(c_zipFileCheck && Pattern.compile(getConfig().getString("zipFileCheckList", "\\.(?:jar|zip)$")).matcher(c_file).find()){
                     if(!isJARFileIntact(c_tempPath)){
                         log(logLevel.WARN, m.updateZipFileCheck);
-                        delFile(c_tempPath);
+                        new File(c_tempPath).delete();
                         continue;
                     }
                 }
@@ -451,7 +477,7 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                     if(Objects.equals(tempFileHas, updatePathFileHas) || Objects.equals(tempFileHas, fileHash(c_filePath))){
                         log(logLevel.MARK, m.updateFileAlreadyLatest);
                         _fail --;
-                        delFile(c_tempPath);
+                        new File(c_tempPath).delete();
                         continue;
                     }
                 }
@@ -506,7 +532,7 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
         }
 
         // 获取部分文件直链
-        public  String getFileUrl(String _url, String matchFileName) {
+        public  String getFileUrl(String _url, String matchFileName, String matchLoader) {
             // 移除 URL 最后的斜杠
             String url = _url.replaceAll("/$", "");
 
@@ -591,6 +617,15 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                     // 遍历版本列表
                     for(Object _version : versions){
                         Map<?, ?> version = (Map<?, ?>) _version;
+                        // 检查标签 loaders
+                        if(!matchLoader.isEmpty()){
+                            ArrayList<String> loaders = new ArrayList<>();
+                            for(Object loader : (ArrayList<?>) version.get("loaders")){
+                                loaders.add(((String) loader).toLowerCase());
+                            }
+                            // 标签不匹配时跳过
+                            if(!loaders.contains(matchLoader)){continue;}
+                        }
                         ArrayList<?> files = (ArrayList<?>) version.get("files");
                         // 遍历发布文件列表
                         for(Object _file : files){
@@ -689,18 +724,19 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
         }
 
         // 获取 HTTP 请求实例
-        public okhttp3.Call fetch(String url, boolean head){
+        public Response fetch(String url, boolean head){
             _allRequests ++;
             // HTTP 客户端
             OkHttpClient.Builder client = new OkHttpClient.Builder();
 
             // 启用网络代理
             if(!getConfig().getString("proxy.type", "DIRECT").equals("DIRECT")){
-                client.proxy(new Proxy(
+                Proxy proxy = new Proxy(
                         Proxy.Type.valueOf(getConfig().getString("proxy.type")),
                         new InetSocketAddress(
                                 getConfig().getString("proxy.host", "127.0.0.1"),
-                                getConfig().getInt("proxy.port", 7890))));
+                                getConfig().getInt("proxy.port", 7890)));
+                client.proxy(proxy);
             }
 
             // 禁用 SSL 验证
@@ -730,8 +766,7 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
             }
 
             // 请求实例
-            Request.Builder request = new Request.Builder()
-                    .url(url);
+            Request.Builder request = new Request.Builder().url(url);
             // 请求方式
             if(head){request.head();}
             // 添加请求头
@@ -743,16 +778,40 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                 }
             }
 
-            return client.build().newCall(request.build());
+            Response res = null;
+            for(int i = 0; i < getConfig().getInt("fetchErrRetry", 4); i++){
+                if(i > 0){
+                    try {
+                        long delay = getConfig().getInt("fetchErrRetryDelay", 5) + ((i - 1) * 2L);
+                        log(logLevel.NET_WARN, "[HTTP] "+ m.piece(m.networkErrorRetry, delay));
+                        Thread.sleep(delay * 1000L);
+                    } catch (InterruptedException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+                try{
+                    Call call = client.build().newCall(request.build());
+                    res = call.execute();
+                    if (!res.isSuccessful()) {
+                        res.close();
+                        continue;
+                    }
+                    return res;
+                } catch (IOException e) {
+                    log(logLevel.NET_WARN, "[HTTP] " + e.getMessage());
+                }
+            }
+            if(res != null) res.close();
+            return null;
         }
 
         // http 请求获取字符串
         public String httpGet(String url) {
-            try (Response response = fetch(url, false).execute()) {
-                if (!response.isSuccessful()) {
-                    return null;
-                }
-                return response.body().string();
+            try(Response res = fetch(url, false)){
+                if(res == null) return null;
+                String str = res.body().string();
+                res.close();
+                return str;
             } catch (IOException e) {
                 log(logLevel.NET_WARN, "[HTTP] " + e.getMessage());
             }
@@ -761,48 +820,29 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
 
         // 下载文件到指定目录
         public boolean downloadFile(String url, String path) {
-            try (Response response = fetch(url, false).execute()) {
-                if(!response.isSuccessful()){
-                    return false;
-                }
-                try (InputStream inputStream = response.body().byteStream();
+            try(Response res = fetch(url, false)){
+                if(res == null) return false;
+                try (InputStream inputStream = res.body().byteStream();
                      OutputStream outputStream = new FileOutputStream(path)) {
 
-                    byte[] buffer = new byte[1024];
+                    byte[] buffer = new byte[512 * 1024];
                     int bytesRead;
                     while ((bytesRead = inputStream.read(buffer)) != -1) {
                         outputStream.write(buffer, 0, bytesRead);
                     }
                 }
+                res.close();
                 return true;
             } catch (IOException e) {
-                log(logLevel.NET_WARN, "[HTTP] "+ e.getMessage());
+                log(logLevel.NET_WARN, "[HTTP] " + e.getMessage());
             }
             return false;
         }
 
-        // 通过 HEAD 请求获取一些特征信息
-        public String getFeature(String url){
-            try (Response response = fetch(url, true).execute()) {
-                if(!response.isSuccessful()){
-                    return "??_"+ nowDate().hashCode();
-                }
-                String contentLength = SEL(response.headers().get("Content-Length"), -1).toString();
-                if(!contentLength.equals("-1")){
-                    return "CL_"+ contentLength;
-                }
-                String location = SEL(response.headers().get("Location"), "Invalid").toString();
-                if(!location.equals("Invalid")){
-                    return "LH_"+ location.hashCode();
-                }
-            } catch (IOException e) {
-                log(logLevel.NET_WARN, "[HTTP.HEAD] "+ e.getMessage());
-            }
-            return "??_"+ nowDate().hashCode();
-        }
-
         // 在插件更新过程中输出尽可能详细的日志
         public void log(logLevel level, String text){
+
+            if(text.isEmpty()) return;
 
             // 获取用户启用了哪些日志等级
             List<String> userLogLevel = getConfig().getStringList("logLevel");
@@ -858,26 +898,6 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
             return now.format(formatter);
         }
-
-        // 处理 URL 中的特殊字符
-        public String checkURL(String url){
-            // 清除前后的空格
-            // 转义 URL 中的空格
-            try {
-                return new URI(url.trim()
-                        .replace(" ", "%20"))
-                        .toASCIIString();
-            } catch (URISyntaxException e) {
-                log(logLevel.WARN, "[URI] "+ m.piece(m.urlInvalid, url));
-                return null;
-            }
-        }
-
-        // 删除文件
-        public void delFile(String path){
-            new File(path).delete();
-            // outInfo(logLevel.WARN, _nowFile +"[FILE] 删除文件失败: "+ path);
-        }
     }
 
     // 创建目录
@@ -929,6 +949,7 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
         public static String debugErrUrlResolveNoName;
         public static String debugErrNoID;
         public static String urlInvalid;
+        public static String networkErrorRetry;
 
         // 处理消息模板
         public static String piece(String message, Object in1){return message.replace("%1", ""+ in1);}
@@ -976,5 +997,6 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
         m.debugErrUrlResolveNoName = gm("debugErrUrlResolveNoName", "URL 解析错误, 未找到项目名称: %1");
         m.debugErrNoID = gm("debugErrNoID", "未找到项目 ID: %1");
         m.urlInvalid = gm("urlInvalid", "URL 无效或不规范: %1");
+        m.networkErrorRetry = gm("networkErrorRetry", "网络错误, 等待 %1 秒...");
     }
 }

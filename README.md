@@ -49,11 +49,13 @@ velocity-server/
 - [x] 根据插件发布页自动找到下载链接
   - `GitHub, Jenkins, Spigot, Modrinth, Bukkit, 鬼斩构建站 v2, MineBBS, CurseForge`
     - 支持下载 GitHub 中的预发布版本
+    - 支持指定 Modrinth 中的平台
 - [x] 支持匹配相同发布下的不同文件
   - `GitHub, Jenkins, Modrinth`
 - [x] 支持文件完整性检查
 - [x] 缓存上一个更新的信息, 不重复下载文件
 - [x] 不重复安装更新
+- [x] 错误重试机制
 - [x] 每个更新任务可以单独添加配置
 - [x] 可配置的证书验证
 - [x] 自定义输出日志等级
@@ -119,6 +121,11 @@ ignoreDuplicates: true
 # 是否启用 SSL 验证, 通常情况请勿关闭
 sslVerify: true
 
+# 网络请求失败重试次数
+fetchErrRetry: 4
+# 初始重试延迟, 每次重试 + 2s
+fetchErrRetryDelay: 5
+
 # 设置网络代理
 proxy:
   type: DIRECT # DIRECT | HTTP | SOCKS
@@ -128,7 +135,7 @@ proxy:
 # HTTP 请求中编辑请求头
 setRequestProperty:
   - name: 'User-Agent'
-    value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    value: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36'
 
 # 启用哪些日志等级
 logLevel:
@@ -146,17 +153,17 @@ logLevel:
 list:
 
   - file: 'AutoUpdatePlugins自动更新.jar'
-    url: https://github.com/ApliNi/AutoUpdatePlugins/
+    url: https://modrinth.com/plugin/autoupdateplugins
 
 ### 示例配置 ### 测试时注意 Yaml 格式
 
 #  - file: 'EssentialsX.jar' # Github
 #    url: https://github.com/EssentialsX/Essentials
-#    get: 'EssentialsX-([0-9.]+)\.jar'  # 如果 GitHub/Jenkins 发布中存在多个文件, 则需要匹配其中一个, 否则下载第一个 (使用正则表达式
+#    get: 'EssentialsX-.*\.jar'  # 如果 GitHub/Jenkins 发布中存在多个文件, 则需要匹配其中一个, 否则下载第一个 (使用正则表达式
 
 #  - file: 'EssentialsXChat.jar' # 匹配相同发布中的不同文件
 #    url: https://github.com/EssentialsX/Essentials
-#    get: 'EssentialsXChat-([0-9.]+)\.jar'
+#    get: 'EssentialsXChat-.*\.jar'
 
 #  - file: 'Geyser-Spigot.jar' # URL
 #    url: https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/spigot
@@ -169,6 +176,10 @@ list:
 
 #  - file: 'CoreProtect.jar' # Modrinth
 #    url: https://modrinth.com/plugin/coreprotect/
+
+#  - file: 'simple-voice-chat.jar'
+#    url: https://modrinth.com/plugin/simple-voice-chat
+#    loader: paper # 指定平台
 
 #  - file: 'UseTranslatedNames翻译物品名.jar'
 #    url: https://modrinth.com/plugin/usetranslatednames
@@ -203,9 +214,51 @@ list:
 # String filePath;          // 最终安装路径, 默认使用全局配置
 # String path;              // 同时覆盖 updatePath 和 filePath 配置
 # String get;               // 选择指定文件的正则表达式, 默认选择第一个. 仅限 GitHub, Jenkins, Modrinth
+# String loader;            // 匹配平台标签, 仅限 Modrinth
 # boolean getPreRelease;    // 允许下载预发布版本, 默认 false. 仅限 GitHub
 # boolean zipFileCheck;     // 启用 zip 文件完整性检查
 # boolean ignoreDuplicates; // 关闭哈希检查
+
+
+# 在这里编辑插件可能显示的消息
+message:
+  updateCheckIntervalTooLow: '### 更新检查间隔过低将造成性能问题! ###'
+  timer: '更新检查将在 %1 秒后运行, 并以每 %2 秒的间隔重复运行'
+  commandReloadOnUpdating: '当前正在运行更新, 配置重载将被推迟'
+  commandReloadOK: '已完成重载'
+  commandRepeatedRunUpdate: '已有一个未完成的更新正在运行'
+  commandUpdateStart: '更新开始运行!'
+  commandFullLog: '完整日志:'
+  commandStopUpdateIng: '正在停止当前更新... '
+  stopUpdate: '已停止当前更新'
+  repeatedRunUpdate: '### 更新程序重复启动或出现错误? ###'
+  updateStart: '[## 开始运行自动更新 ##]'
+  configErrList: '更新列表配置错误? '
+  configErrUpdate: '更新列表配置错误? 项目为空'
+  configErrMissing: '更新列表配置错误? 缺少基本配置'
+  updateChecking: '正在检查更新...'
+  updateErrParsingDUrl: '解析文件直链时出现错误, 将跳过此更新'
+  updateTempAlreadyLatest: '[缓存] 文件已是最新版本'
+  updateErrDownload: '下载文件时出现异常, 将跳过此更新'
+  updateZipFileCheck: '[Zip 完整性检查] 文件不完整, 将跳过此更新'
+  updateFileAlreadyLatest: '文件已是最新版本'
+  updateFulSizeDifference: '更新完成 [%1MB] -> [%2MB]'
+  updateFul: '[## 更新全部完成 ##]'
+  updateFulTime: '耗时: %1 秒'
+  updateFulFail: '失败: %1, '
+  updateFulUpdate: '更新: %1, '
+  updateFulOK: '成功: %1'
+  updateFulNetRequest: '网络请求: %1, '
+  updateFulDownloadFile: '下载文件: %1MB'
+  logReloadOK: '已完成重载'
+  debugGetVersion: '找到版本: %1'
+  debugNoFileMatching: '没有匹配的文件: %1'
+  debugNoRepositoryPath: '未找到存储库路径: %1'
+  debugErrUrlResolveNoID: 'URL 解析错误, 不包含插件 ID?: %1'
+  debugErrUrlResolveNoName: 'URL 解析错误, 未找到项目名称: %1'
+  debugErrNoID: '未找到项目 ID: %1'
+  urlInvalid: 'URL 无效或不规范: %1'
+  networkErrorRetry: '网络错误, 等待 %1 秒...'
 
 ```
 
