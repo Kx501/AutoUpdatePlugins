@@ -571,7 +571,6 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                     if (entry.isDirectory()) {
                         continue;
                     }
-                    log(logLevel.DEBUG, "unzip" + entry.getName());
                     if (pattern.matcher(entry.getName()).matches()) {
                         if (targetFile.getParent() != null) {
                             Files.createDirectories(targetFile.getParent());
