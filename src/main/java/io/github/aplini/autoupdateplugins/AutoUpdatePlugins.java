@@ -41,7 +41,10 @@ import java.util.concurrent.CompletableFuture;
 import java.util.jar.JarFile;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
+import java.util.zip.ZipFile;
+import java.util.zip.ZipInputStream;
 
 
 public final class AutoUpdatePlugins extends JavaPlugin implements Listener, CommandExecutor, TabExecutor {
@@ -265,6 +268,7 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
         String c_updatePath;        // 更新存放路径, 默认使用全局配置
         String c_filePath;          // 最终安装路径, 默认使用全局配置
         String c_get;               // 查找单个文件的正则表达式, 默认选择第一个. 仅限 GitHub, Jenkins, Modrinth
+        String c_zipGet;            // 如果需要解压文件, 使用这个参数指定正则表达式
         String c_loader;            // 插件加载器, 仅限 Modrinth
         boolean c_zipFileCheck;     // 启用 zip 文件完整性检查, 默认默认使用全局配置或 true
         boolean c_getPreRelease;    // 允许下载预发布版本, 默认 false. 仅限 GitHub
@@ -380,6 +384,7 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                 }
 
                 c_get = (String) SEL(li.get("get"), "");
+                c_zipGet = (String) SEL(li.get("zipGet"), "");
                 c_loader = ((String) SEL(li.get("loader"), "")).toLowerCase();
                 c_zipFileCheck = (boolean) SEL(li.get("zipFileCheck"), getConfig().getBoolean("zipFileCheck", true));
                 c_getPreRelease = (boolean) SEL(li.get("getPreRelease"), false);
@@ -387,7 +392,7 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                 // "[xx] 正在检查更新..."
                 log(logLevel.DEBUG, m.updateChecking);
 
-                // 下载文件到缓存目录
+                // 找到文件下载链接
                 String dUrl = getFileUrl(c_url, c_get, c_loader);
                 if(dUrl == null){
                     log(logLevel.WARN, _nowParser + m.updateErrParsingDUrl);
@@ -409,7 +414,7 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                 String pPath = "";
                 if(getConfig().getBoolean("enablePreviousUpdate", true)){
                     // 通过 HEAD 请求获取文件特征信息
-                    try(Response res = fetch(dUrl, true)){
+                    try(Response res = fetch(dUrl, true, "reqDownload")){
                         if(res != null){
                             String contentLength = SEL(res.headers().get("Content-Length"), -1).toString();
                             if(!contentLength.equals("-1")){
@@ -469,6 +474,29 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                 }
 
                 // 在这里实现运行系统命令的功能
+
+                // 从压缩包中解压文件
+                if(!c_zipGet.isEmpty()) {
+                    // 重命名文件, 添加 zip 后缀
+                    String zipFilePath = c_tempPath + "_aup.zip";
+                    try{
+                        Files.move(Paths.get(c_tempPath), Paths.get(zipFilePath), StandardCopyOption.REPLACE_EXISTING);
+                    }catch (IOException e){
+                        log(logLevel.WARN, e.getMessage());
+                        new File(c_tempPath).delete();
+                        new File(zipFilePath).delete();
+                        continue;
+                    }
+
+                    // 解压文件
+                    boolean ok = unzip(zipFilePath, c_zipGet, c_tempPath);
+                    new File(zipFilePath).delete();
+                    if(!ok){
+                        log(logLevel.WARN, m.zipDecompressionFailed);
+                        new File(c_tempPath).delete();
+                        continue;
+                    }
+                }
 
                 // 哈希值检查, 如果新文件哈希与更新目录中的相等, 或者与正在运行的版本相等, 则无需更新
                 if(getConfig().getBoolean("ignoreDuplicates", true) && (boolean) SEL(li.get("ignoreDuplicates"), true)){
@@ -531,12 +559,75 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
             return "null";
         }
 
+        // 从 zip 中解压第一个匹配正则表达式的文件
+        public boolean unzip(String zipFilePath, String regex, String destPath) {
+            Pattern pattern = Pattern.compile(regex);
+            Path targetFile = Paths.get(destPath);
+            try (ZipFile zipFile = new ZipFile(zipFilePath)) {
+                Enumeration<? extends ZipEntry> entries = zipFile.entries();
+                while (entries.hasMoreElements()) {
+                    ZipEntry entry = entries.nextElement();
+                    // 跳过目录
+                    if (entry.isDirectory()) {
+                        continue;
+                    }
+                    log(logLevel.DEBUG, "unzip" + entry.getName());
+                    if (pattern.matcher(entry.getName()).matches()) {
+                        if (targetFile.getParent() != null) {
+                            Files.createDirectories(targetFile.getParent());
+                        }
+                        try (InputStream is = zipFile.getInputStream(entry)) {
+                            Files.copy(is, targetFile, StandardCopyOption.REPLACE_EXISTING);
+                        }
+                        return true;
+                    }
+                }
+            } catch (IOException e) {
+                log(logLevel.WARN, e.getMessage());
+            }
+            return false;
+        }
+
         // 获取部分文件直链
-        public  String getFileUrl(String _url, String matchFileName, String matchLoader) {
+        public String getFileUrl(String _url, String matchFileName, String matchLoader) {
             // 移除 URL 最后的斜杠
             String url = _url.replaceAll("/$", "");
 
-            if(url.contains("://github.com/")){ // GitHub 发布
+            if(url.contains("://github.com/") && url.endsWith("/actions")){ // GitHub 自动构建
+                _nowParser = "[GitHub_Actions] ";
+                // 获取路径 "/ApliNi/Chat2QQ"
+                Matcher matcher = Pattern.compile("/([^/]+)/([^/]+)$").matcher(url.replaceAll("/actions$", ""));
+                if(matcher.find()){
+                    // https://api.github.com/repos/ApliNi/Chat2QQ/actions/artifacts
+                    // 获取所有构建
+                    String data = httpGet("https://api.github.com/repos" + matcher.group(0) + "/actions/artifacts");
+                    if(data == null){return null;}
+                    Map<?, ?> map = (Map<?, ?>) new Gson().fromJson(data, HashMap.class);
+                    ArrayList<?> artifacts = (ArrayList<?>) map.get("artifacts");
+                    for(Object _li : artifacts){
+                        Map<?, ?> li = (Map<?, ?>) _li;
+                        String name = (String) li.get("name");
+                        if(matchFileName.isEmpty() || Pattern.compile(matchFileName).matcher(name).matches()){
+                            if(li.get("workflow_run") == null) continue;
+                            Map<?, ?> workflow_run = (Map<?, ?>) li.get("workflow_run");
+                            long workflowId = ((Number) workflow_run.get("id")).longValue();
+                            long id = ((Number) li.get("id")).longValue();
+                            // 需要认证
+                            // https://github.com/ApliNi/Chat2QQ/actions/runs/{workflowId}/artifacts/{id}
+                            // String dUrl = "https://github.com" + matcher.group(0) + "/actions/runs/" + workflowId + "/artifacts/" + id;
+                            String dUrl = "https://nightly.link" + matcher.group(0) + "/actions/runs/" + workflowId + "/" + name + ".zip";
+                            log(logLevel.DEBUG, _nowParser + m.piece(m.debugGetVersion, dUrl));
+                            return dUrl;
+                        }
+                    }
+                    log(logLevel.WARN, _nowParser + m.piece(m.debugNoFileMatching, url));
+                    return null;
+                }
+                log(logLevel.WARN, _nowParser + m.piece(m.debugNoRepositoryPath, url));
+                return null;
+            }
+
+            else if(url.contains("://github.com/")){ // GitHub 发布
                 _nowParser = "[GitHub] ";
                 // 获取路径 "/ApliNi/Chat2QQ"
                 Matcher matcher = Pattern.compile("/([^/]+)/([^/]+)$").matcher(url);
@@ -724,18 +815,19 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
         }
 
         // 获取 HTTP 请求实例
-        public Response fetch(String url, boolean head){
+        public Response fetch(String url, boolean head, String proxyReqType){
             _allRequests ++;
             // HTTP 客户端
             OkHttpClient.Builder client = new OkHttpClient.Builder();
 
             // 启用网络代理
-            if(!getConfig().getString("proxy.type", "DIRECT").equals("DIRECT")){
-                Proxy proxy = new Proxy(
-                        Proxy.Type.valueOf(getConfig().getString("proxy.type")),
-                        new InetSocketAddress(
-                                getConfig().getString("proxy.host", "127.0.0.1"),
-                                getConfig().getInt("proxy.port", 7890)));
+            if(!getConfig().getString("proxy.type", "DIRECT").equals("DIRECT") &&
+                    getConfig().getBoolean("proxy." + proxyReqType, true)){
+                log(logLevel.DEBUG, "[HTTP] [proxyReqType] " + proxyReqType);
+                Proxy.Type type = Proxy.Type.valueOf(getConfig().getString("proxy.type", "DIRECT").toUpperCase());
+                String host = getConfig().getString("proxy.host", "127.0.0.1");
+                int port = getConfig().getInt("proxy.port", 7890);
+                Proxy proxy = new Proxy(type, InetSocketAddress.createUnresolved(host, port));
                 client.proxy(proxy);
             }
 
@@ -807,11 +899,10 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
 
         // http 请求获取字符串
         public String httpGet(String url) {
-            try(Response res = fetch(url, false)){
+            log(logLevel.DEBUG, "[HTTP] [httpGet] " + url);
+            try(Response res = fetch(url, false, "reqApi")){
                 if(res == null) return null;
-                String str = res.body().string();
-                res.close();
-                return str;
+                return res.body().string();
             } catch (IOException e) {
                 log(logLevel.NET_WARN, "[HTTP] " + e.getMessage());
             }
@@ -820,7 +911,8 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
 
         // 下载文件到指定目录
         public boolean downloadFile(String url, String path) {
-            try(Response res = fetch(url, false)){
+            log(logLevel.DEBUG, "[HTTP] [downloadFile] " + url);
+            try(Response res = fetch(url, false, "reqDownload")){
                 if(res == null) return false;
                 try (InputStream inputStream = res.body().byteStream();
                      OutputStream outputStream = new FileOutputStream(path)) {
@@ -831,7 +923,6 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                         outputStream.write(buffer, 0, bytesRead);
                     }
                 }
-                res.close();
                 return true;
             } catch (IOException e) {
                 log(logLevel.NET_WARN, "[HTTP] " + e.getMessage());
@@ -950,6 +1041,7 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
         public static String debugErrNoID;
         public static String urlInvalid;
         public static String networkErrorRetry;
+        public static String zipDecompressionFailed;
 
         // 处理消息模板
         public static String piece(String message, Object in1){return message.replace("%1", ""+ in1);}
@@ -998,5 +1090,6 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
         m.debugErrNoID = gm("debugErrNoID", "未找到项目 ID: %1");
         m.urlInvalid = gm("urlInvalid", "URL 无效或不规范: %1");
         m.networkErrorRetry = gm("networkErrorRetry", "网络错误, 等待 %1 秒...");
+        m.zipDecompressionFailed = gm("zipDecompressionFailed", "ZIP 解压失败");
     }
 }
