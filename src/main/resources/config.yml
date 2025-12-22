@@ -77,10 +77,15 @@ list:
 #    url: https://github.com/EssentialsX/Essentials
 #    get: 'EssentialsXChat-.*\.jar'
 
-#  - file: 'Chat2QQ.jar' # 下载 GitHub Actions 中的文件
+#  - file: 'TrPlugins.jar'  # 下载 GitHub Actions 中的文件
+#    url: https://github.com/TrPlugins/TrChat/actions
+#    get: 'TrChat Artifacts'  # 匹配 Artifacts Produced during runtime 中的名称
+#    zipGet: 'TrChat-[\.\d]+\.jar'  # 解压: 匹配压缩包中的文件
+
+#  - file: 'Chat2QQ.jar'
 #    url: https://github.com/ApliNi/Chat2QQ/actions
-#    get: 'Chat2QQ\.jar'     # 匹配 Artifacts 名称
-#    zipGet: 'Chat2QQ\.jar'  # 解压文件
+#    get: 'Chat2QQ\.jar'
+#    zipGet: 'Chat2QQ\.jar'
 
 #   - file: 'test.jar'
 #     url: https://www.spigotmc.org/resources/invsee.82342/

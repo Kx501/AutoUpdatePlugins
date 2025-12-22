@@ -138,10 +138,15 @@ list:
 #    url: https://github.com/EssentialsX/Essentials
 #    get: 'EssentialsXChat-.*\.jar'
 
-#  - file: 'Chat2QQ.jar' # Download the file from GitHub Actions
+#  - file: 'TrPlugins.jar'  # Download the file from GitHub Actions
+#    url: https://github.com/TrPlugins/TrChat/actions
+#    get: 'TrChat Artifacts'  # Match the names of Artifacts Produced during runtime
+#    zipGet: 'TrChat-[\.\d]+\.jar'  # Decompression: Match files in compressed packages
+
+#  - file: 'Chat2QQ.jar'
 #    url: https://github.com/ApliNi/Chat2QQ/actions
-#    get: 'Chat2QQ\.jar'     # Match Artifact Names
-#    zipGet: 'Chat2QQ\.jar'  # Unzip the file
+#    get: 'Chat2QQ\.jar'
+#    zipGet: 'Chat2QQ\.jar'
 
 #   - file: 'test.jar'
 #     url: https://www.spigotmc.org/resources/invsee.82342/
