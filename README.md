@@ -22,6 +22,7 @@
     - 支持下载 GitHub 中的预发布版本
     - 支持下载 GitHub Actions 中的文件, 通过 https://nightly.link/ 实现免登录下载
     - 支持指定 Modrinth 中的平台
+    - 支持指定 Modrinth 中的版本
 - [x] 支持匹配相同发布下的不同文件
   - `GitHub, Jenkins, Modrinth`
 - [x] 支持文件完整性检查
@@ -170,6 +171,7 @@ list:
 #  - file: 'simple-voice-chat.jar'
 #    url: https://modrinth.com/plugin/simple-voice-chat
 #    loader: paper # 指定平台
+#    version: ServerVersion # 指定版本, '1.21.10' / ServerVersion
 
 #  - file: 'UseTranslatedNames翻译物品名.jar'
 #    url: https://modrinth.com/plugin/usetranslatednames
@@ -206,6 +208,7 @@ list:
 # String get;               // 选择指定文件的正则表达式, 默认选择第一个. 仅限 GitHub, Jenkins, Modrinth
 # String zipGet;            // 如果需要解压文件, 使用这个参数指定正则表达式
 # String loader;            // 匹配平台标签, 仅限 Modrinth
+# String version;           // 匹配插件版本, 仅限 Modrinth, 填写 "ServerVersion" 自动选择服务器版本
 # boolean getPreRelease;    // 允许下载预发布版本, 默认 false. 仅限 GitHub
 # boolean zipFileCheck;     // 启用 zip 文件完整性检查
 # boolean ignoreDuplicates; // 关闭哈希检查

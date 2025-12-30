@@ -20,6 +20,7 @@ Download: https://modrinth.com/plugin/AutoUpdatePlugins
         - Support downloading pre-releases from GitHub.
         - Supports downloading files in GitHub Actions, enabling login-free downloading through https://nightly.link/
         - Support for specifying platforms in Modrinth
+        - Support specifying the version in Modrinth
 - [x] Support matching different files under the same release
     - `GitHub, Jenkins, Modrinth`.
 - [x] Support for file integrity checking
@@ -167,6 +168,7 @@ list:
 #  - file: 'simple-voice-chat.jar'
 #    url: https://modrinth.com/plugin/simple-voice-chat
 #    loader: paper # Specify platform
+#    version: ServerVersion # Specify version, '1.21.10' / ServerVersion
 
 #  - file: 'UseTranslatedNames.jar'
 #    url: https://modrinth.com/plugin/usetranslatednames
@@ -203,6 +205,7 @@ list:
 # String get;               // Regular expression to select the specified file, first one is selected by default. GitHub, Jenkins, Modrinth only.
 # String zipGet;            // If you need to unzip files, use this parameter to specify the regular expression.
 # String loader;            // Match platform tags, Modrinth only
+# String version;           // Match plugin version, Modrinth only, Fill in "ServerVersion" to automatically select the server version
 # boolean getPreRelease;    // Allow downloading of pre-releases, false by default. GitHub only.
 # boolean zipFileCheck;     // Enable zip file integrity checking
 # boolean ignoreDuplicates; // Turn off hash checking
