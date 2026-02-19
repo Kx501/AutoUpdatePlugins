@@ -49,10 +49,13 @@ velocity-server/
 - [x] 根据插件发布页自动找到下载链接
   - `GitHub, Jenkins, Spigot, Modrinth, Bukkit, 鬼斩构建站 v2, MineBBS, CurseForge`
     - 支持下载 GitHub 中的预发布版本
+    - 支持下载 GitHub Actions 中的文件, 通过 https://nightly.link/ 实现免登录下载
     - 支持指定 Modrinth 中的平台
+    - 支持指定 Modrinth 中的版本
 - [x] 支持匹配相同发布下的不同文件
   - `GitHub, Jenkins, Modrinth`
 - [x] 支持文件完整性检查
+- [x] 从压缩包中解压文件
 - [x] 缓存上一个更新的信息, 不重复下载文件
 - [x] 不重复安装更新
 - [x] 错误重试机制
@@ -131,6 +134,9 @@ proxy:
   type: DIRECT # DIRECT | HTTP | SOCKS
   host: '127.0.0.1'
   port: 7890
+  # 控制不同请求使用代理
+  reqApi: true
+  reqDownload: true
 
 # HTTP 请求中编辑请求头
 setRequestProperty:
@@ -165,6 +171,20 @@ list:
 #    url: https://github.com/EssentialsX/Essentials
 #    get: 'EssentialsXChat-.*\.jar'
 
+#  - file: 'TrPlugins.jar'  # 下载 GitHub Actions 中的文件
+#    url: https://github.com/TrPlugins/TrChat/actions
+#    get: 'TrChat Artifacts'  # 匹配 Artifacts Produced during runtime 中的名称
+#    zipGet: 'TrChat-[\.\d]+\.jar'  # 解压: 匹配压缩包中的文件
+
+#  - file: 'Chat2QQ.jar'
+#    url: https://github.com/ApliNi/Chat2QQ/actions
+#    get: 'Chat2QQ\.jar'
+#    zipGet: 'Chat2QQ\.jar'
+
+#   - file: 'test.jar'
+#     url: https://www.spigotmc.org/resources/invsee.82342/
+#     zipGet: 'InvSee\+\+\.jar' # 解压文件
+
 #  - file: 'Geyser-Spigot.jar' # URL
 #    url: https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/spigot
 
@@ -180,6 +200,7 @@ list:
 #  - file: 'simple-voice-chat.jar'
 #    url: https://modrinth.com/plugin/simple-voice-chat
 #    loader: paper # 指定平台
+#    version: ServerVersion # 指定版本, '1.21.10' / ServerVersion
 
 #  - file: 'UseTranslatedNames翻译物品名.jar'
 #    url: https://modrinth.com/plugin/usetranslatednames
@@ -214,7 +235,9 @@ list:
 # String filePath;          // 最终安装路径, 默认使用全局配置
 # String path;              // 同时覆盖 updatePath 和 filePath 配置
 # String get;               // 选择指定文件的正则表达式, 默认选择第一个. 仅限 GitHub, Jenkins, Modrinth
+# String zipGet;            // 如果需要解压文件, 使用这个参数指定正则表达式
 # String loader;            // 匹配平台标签, 仅限 Modrinth
+# String version;           // 匹配插件版本, 仅限 Modrinth, 填写 "ServerVersion" 自动选择服务器版本
 # boolean getPreRelease;    // 允许下载预发布版本, 默认 false. 仅限 GitHub
 # boolean zipFileCheck;     // 启用 zip 文件完整性检查
 # boolean ignoreDuplicates; // 关闭哈希检查
@@ -259,6 +282,7 @@ message:
   debugErrNoID: '未找到项目 ID: %1'
   urlInvalid: 'URL 无效或不规范: %1'
   networkErrorRetry: '网络错误, 等待 %1 秒...'
+  zipDecompressionFailed: 'ZIP 解压失败'
 
 ```
 

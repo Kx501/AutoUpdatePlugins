@@ -36,7 +36,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.jar.JarFile;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
+import java.util.zip.ZipFile;
 
 @Plugin(id = "autoupdateplugins", name = "AutoUpdatePlugins", version = "${project.version}")
 public class AutoUpdatePluginsVelocity {
@@ -57,6 +59,8 @@ public class AutoUpdatePluginsVelocity {
     Map<String, Object> config;
 
     List<String> logList = new ArrayList<>();
+
+    String ServerVersion = "";
 
     @Inject
     public AutoUpdatePluginsVelocity(ProxyServer proxy, Logger logger) {
@@ -97,26 +101,28 @@ public class AutoUpdatePluginsVelocity {
             try {
                 javax.net.ssl.HttpsURLConnection.setDefaultSSLSocketFactory(sslContext.getSocketFactory());
             } catch (Exception e) {
-                logger.warn("[AUP] 设置默认 SSL Socket Factory 失败: {}", e.getMessage());
+                logger.warn("设置默认 SSL Socket Factory 失败: {}", e.getMessage());
             }
         }
 
         // 检查过时的配置
         if (getConfigBoolean("debugLog", false)) {
-            logger.warn("[AUP] `debugLog` 配置已弃用, 请使用 `logLevel` - 启用哪些日志等级");
+            logger.warn("`debugLog` 配置已弃用, 请使用 `logLevel` - 启用哪些日志等级");
         }
 
         // 检查缺失的配置
         if (getConfig("setRequestProperty") == null) {
-            logger.warn("[AUP] 缺少配置 `setRequestProperty` - HTTP 请求中编辑请求头");
+            logger.warn("缺少配置 `setRequestProperty` - HTTP 请求中编辑请求头");
         }
         if (getConfig("message") == null) {
-            logger.warn("[AUP] 缺少配置 `message` - 插件消息配置");
+            logger.warn("缺少配置 `message` - 插件消息配置");
         }
+
+        ServerVersion = proxy.getVersion() != null ? proxy.getVersion().getVersion() : "";
 
         scheduleTasks();
         registerCommands();
-        logger.info("[AUP] Velocity 初始化完成");
+        logger.info("Velocity 初始化完成");
     }
 
     @Subscribe
@@ -137,7 +143,7 @@ public class AutoUpdatePluginsVelocity {
             exportIfMissing(pluginDir.resolve("config.yml"), "/config.yml");
             exportIfMissing(localesDir.resolve("config_en.yml"), "/Locales/config_en.yml");
         } catch (Exception e) {
-            logger.warn("[AUP] 创建配置目录失败: {}", e.getMessage());
+            logger.warn("创建配置目录失败: {}", e.getMessage());
         }
     }
 
@@ -181,7 +187,7 @@ public class AutoUpdatePluginsVelocity {
             }
             saveTemp();
         } catch (Exception e) {
-            logger.warn("[AUP] 加载配置失败: {}", e.getMessage());
+            logger.warn("加载配置失败: {}", e.getMessage());
             this.config = new LinkedHashMap<>();
             this.temp = new LinkedHashMap<>();
             temp.put("previous", new HashMap<>());
@@ -220,7 +226,7 @@ public class AutoUpdatePluginsVelocity {
             }
             Files.write(tempFile.toPath(), sb.toString().getBytes(StandardCharsets.UTF_8));
         } catch (Exception e) {
-            logger.warn("[AUP] 保存临时文件失败: {}", e.getMessage());
+            logger.warn("保存临时文件失败: {}", e.getMessage());
         }
     }
 
@@ -228,7 +234,7 @@ public class AutoUpdatePluginsVelocity {
         long startupDelay = getConfigLong("startupDelay", 64);
         long startupCycle = getConfigLong("startupCycle", 61200);
         if (startupCycle < 256 && !getConfigBoolean("disableUpdateCheckIntervalTooLow", false)) {
-            logger.warn("[AUP] ### 更新检查间隔过低将造成性能问题! ###");
+            logger.warn("" + gm("updateCheckIntervalTooLow", "### 更新检查间隔过低将造成性能问题! ###"));
             startupCycle = 512;
         }
         if (timer != null) {
@@ -237,7 +243,7 @@ public class AutoUpdatePluginsVelocity {
         }
         timer = new Timer();
         timer.schedule(new updatePlugins(), startupDelay * 1000, startupCycle * 1000);
-        logger.info("[AUP] 定时器: {}s 后启动, 每 {}s 周期", startupDelay, startupCycle);
+        logger.info("" + piece(gm("timer", "更新检查将在 %1 秒后运行, 并以每 %2 秒的间隔重复运行"), startupDelay, startupCycle));
     }
 
     private void registerCommands() {
@@ -253,27 +259,27 @@ public class AutoUpdatePluginsVelocity {
                         "reload").executes(ctx -> {
                             if (lock) {
                                 awaitReload = true;
-                                ctx.getSource().sendPlainMessage("[AUP] 当前正在运行更新, 配置重载将被推迟");
+                                ctx.getSource().sendPlainMessage("" + gm("commandReloadOnUpdating", "当前正在运行更新, 配置重载将被推迟"));
                                 return 1;
                             }
                             loadConfig();
-                            ctx.getSource().sendPlainMessage("[AUP] 已完成重载");
+                            ctx.getSource().sendPlainMessage("" + gm("commandReloadOK", "已完成重载"));
                             scheduleTasks();
                             return 1;
                         }))
                 .then(com.mojang.brigadier.builder.LiteralArgumentBuilder.<com.velocitypowered.api.command.CommandSource>literal(
                         "update").executes(ctx -> {
                             if (lock && !getConfigBoolean("disableLook", false)) {
-                                ctx.getSource().sendPlainMessage("[AUP] 已有一个未完成的更新正在运行");
+                                ctx.getSource().sendPlainMessage("" + gm("commandRepeatedRunUpdate", "已有一个未完成的更新正在运行"));
                                 return 1;
                             }
-                            ctx.getSource().sendPlainMessage("[AUP] 更新开始运行!");
+                            ctx.getSource().sendPlainMessage("" + gm("commandUpdateStart", "更新开始运行!"));
                             new Timer().schedule(new updatePlugins(), 0);
                             return 1;
                         }))
                 .then(com.mojang.brigadier.builder.LiteralArgumentBuilder.<com.velocitypowered.api.command.CommandSource>literal(
                         "log").executes(ctx -> {
-                            ctx.getSource().sendPlainMessage("[AUP] 完整日志:");
+                            ctx.getSource().sendPlainMessage("" + gm("commandFullLog", "完整日志:"));
                             for (String li : logList) {
                                 ctx.getSource().sendPlainMessage("  | " + li);
                             }
@@ -285,9 +291,9 @@ public class AutoUpdatePluginsVelocity {
                                 if (future != null) {
                                     future.cancel(true);
                                 }
-                                ctx.getSource().sendPlainMessage("[AUP] 正在停止当前更新...");
+                                ctx.getSource().sendPlainMessage("" + gm("commandStopUpdateIng", "正在停止当前更新..."));
                             } else {
-                                ctx.getSource().sendPlainMessage("[AUP] 已停止当前更新");
+                                ctx.getSource().sendPlainMessage("" + gm("stopUpdate", "已停止当前更新"));
                             }
                             return 1;
                         }));
@@ -298,9 +304,21 @@ public class AutoUpdatePluginsVelocity {
         proxy.getCommandManager().register(meta, command);
     }
 
-    // 配置访问方法
+    // 配置访问方法（支持点号路径如 proxy.type）
     private Object getConfig(String key) {
-        return config.get(key);
+        if (key == null || key.isEmpty())
+            return null;
+        if (!key.contains("."))
+            return config.get(key);
+        Object current = config;
+        for (String part : key.split("\\.")) {
+            if (!(current instanceof Map))
+                return null;
+            current = ((Map<?, ?>) current).get(part);
+            if (current == null)
+                return null;
+        }
+        return current;
     }
 
     private String getConfigString(String key, String def) {
@@ -341,6 +359,24 @@ public class AutoUpdatePluginsVelocity {
         return def;
     }
 
+    private String gm(String key, String defaultValue) {
+        Object message = getConfig("message");
+        if (message instanceof Map) {
+            Object v = ((Map<?, ?>) message).get(key);
+            if (v != null)
+                return String.valueOf(v);
+        }
+        return defaultValue;
+    }
+
+    private static String piece(String msg, Object in1) {
+        return msg.replace("%1", String.valueOf(in1));
+    }
+
+    private static String piece(String msg, Object in1, Object in2) {
+        return piece(msg, in1).replace("%2", String.valueOf(in2));
+    }
+
     // 更新逻辑
     private class updatePlugins extends TimerTask {
         String _fileName = "[???] ";
@@ -358,7 +394,9 @@ public class AutoUpdatePluginsVelocity {
         String c_updatePath;
         String c_filePath;
         String c_get;
-        String c_loader; // 插件加载器, 仅限 Modrinth
+        String c_zipGet;            // 如果需要解压文件, 使用这个参数指定正则表达式
+        String c_loader;           // 插件加载器, 仅限 Modrinth
+        String c_version;         // 插件版本, 仅限 Modrinth
         boolean c_zipFileCheck;
         boolean c_getPreRelease;
 
@@ -367,7 +405,7 @@ public class AutoUpdatePluginsVelocity {
             future = CompletableFuture.runAsync(() -> {
                 // 防止重复运行
                 if (lock && !getConfigBoolean("disableLook", false)) {
-                    log(logLevel.WARN, "### 更新程序重复启动或出现错误? ###");
+                    log(logLevel.WARN, gm("repeatedRunUpdate", "### 更新程序重复启动或出现错误? ###"));
                     return;
                 }
                 lock = true;
@@ -376,27 +414,26 @@ public class AutoUpdatePluginsVelocity {
                 runUpdate();
 
                 // 处理统计信息
-                log(logLevel.INFO, "[## 更新全部完成 ##]");
-                log(logLevel.INFO, "  - 耗时: " + Math.round((System.nanoTime() - _startTime) / 1_000_000_000.0) + " 秒");
+                log(logLevel.INFO, gm("updateFul", "[## 更新全部完成 ##]"));
+                log(logLevel.INFO, "  - " + piece(gm("updateFulTime", "耗时: %1 秒"), Math.round((System.nanoTime() - _startTime) / 1_000_000_000.0)));
 
                 String st = "  - ";
                 if (_fail != 0) {
-                    st += "失败: " + _fail + ", ";
+                    st += piece(gm("updateFulFail", "失败: %1, "), _fail);
                 }
                 if (_success != 0) {
-                    st += "更新: " + _success + ", ";
+                    st += piece(gm("updateFulUpdate", "更新: %1, "), _success);
                 }
-                log(logLevel.INFO, st + "成功: " + _updateFul);
+                log(logLevel.INFO, st + piece(gm("updateFulOK", "成功: %1"), _updateFul));
 
-                log(logLevel.INFO, "  - 网络请求: " + _allRequests + ", 下载文件: "
-                        + String.format("%.2f", _allFileSize / 1048576) + "MB");
+                log(logLevel.INFO, "  - " + piece(gm("updateFulNetRequest", "网络请求: %1, "), _allRequests) + piece(gm("updateFulDownloadFile", "下载文件: %1MB"), String.format("%.2f", _allFileSize / 1048576)));
 
                 // 运行被推迟的配置重载
                 if (awaitReload) {
                     awaitReload = false;
                     loadConfig();
                     scheduleTasks();
-                    logger.info("[AUP] 已完成重载");
+                    logger.info("" + gm("logReloadOK", "已完成重载"));
                 }
 
                 lock = false;
@@ -408,17 +445,17 @@ public class AutoUpdatePluginsVelocity {
             logList = new ArrayList<>(); // 清空上一份日志
             _startTime = System.nanoTime(); // 记录运行时间
 
-            log(logLevel.INFO, "[## 开始运行自动更新 ##]");
+            log(logLevel.INFO, gm("updateStart", "[## 开始运行自动更新 ##]"));
 
             List<?> list = (List<?>) getConfig("list");
             if (list == null) {
-                log(logLevel.WARN, "更新列表配置错误? ");
+                log(logLevel.WARN, gm("configErrList", "更新列表配置错误? "));
                 return;
             }
 
             for (Object _li : list) {
                 if (future != null && future.isCancelled()) {
-                    log(logLevel.INFO, "已停止当前更新");
+                    log(logLevel.INFO, gm("stopUpdate", "已停止当前更新"));
                     return;
                 }
 
@@ -429,7 +466,7 @@ public class AutoUpdatePluginsVelocity {
 
                 Map<?, ?> li = (Map<?, ?>) _li;
                 if (li == null) {
-                    log(logLevel.WARN, "更新列表配置错误? 项目为空");
+                    log(logLevel.WARN, gm("configErrUpdate", "更新列表配置错误? 项目为空"));
                     continue;
                 }
 
@@ -437,7 +474,7 @@ public class AutoUpdatePluginsVelocity {
                 c_file = String.valueOf(sel(li.get("file"), ""));
                 c_url = String.valueOf(sel(li.get("url"), "")).trim();
                 if (c_file.isEmpty() || c_url.isEmpty()) {
-                    log(logLevel.WARN, "更新列表配置错误? 缺少基本配置");
+                    log(logLevel.WARN, gm("configErrMissing", "更新列表配置错误? 缺少基本配置"));
                     continue;
                 }
 
@@ -476,15 +513,24 @@ public class AutoUpdatePluginsVelocity {
                 }
 
                 c_get = String.valueOf(sel(li.get("get"), ""));
+                c_zipGet = String.valueOf(sel(li.get("zipGet"), ""));
                 c_loader = String.valueOf(sel(li.get("loader"), "")).toLowerCase();
+                c_version = String.valueOf(sel(li.get("version"), "")).toLowerCase();
                 c_zipFileCheck = (boolean) sel(li.get("zipFileCheck"), getConfigBoolean("zipFileCheck", true));
                 c_getPreRelease = (boolean) sel(li.get("getPreRelease"), false);
 
-                log(logLevel.DEBUG, "正在检查更新...");
+                if (c_version.equals("serverversion")) {
+                    c_version = ServerVersion;
+                }
+                if (!c_version.isEmpty()) {
+                    log(logLevel.DEBUG, "[version]: \"" + c_version + "\"");
+                }
 
-                String dUrl = getFileUrl(c_url, c_get, c_loader);
+                log(logLevel.DEBUG, gm("updateChecking", "正在检查更新..."));
+
+                String dUrl = getFileUrl(c_url, c_get, c_loader, c_version);
                 if (dUrl == null) {
-                    log(logLevel.WARN, _nowParser + "解析文件直链时出现错误, 将跳过此更新");
+                    log(logLevel.WARN, _nowParser + gm("updateErrParsingDUrl", "解析文件直链时出现错误, 将跳过此更新"));
                     continue;
                 }
 
@@ -494,7 +540,7 @@ public class AutoUpdatePluginsVelocity {
                             .replace(" ", "%20"))
                             .toASCIIString();
                 } catch (URISyntaxException e) {
-                    log(logLevel.WARN, "[URI] URL 无效或不规范: " + dUrl);
+                    log(logLevel.WARN, "[URI] " + piece(gm("urlInvalid", "URL 无效或不规范: %1"), dUrl));
                     dUrl = null;
                 }
                 if (dUrl == null) {
@@ -506,7 +552,7 @@ public class AutoUpdatePluginsVelocity {
                 String pPath = "";
                 if (getConfigBoolean("enablePreviousUpdate", true)) {
                     // 通过 HEAD 请求获取文件特征信息
-                    try (okhttp3.Response res = fetch(dUrl, true)) {
+                    try (okhttp3.Response res = fetch(dUrl, true, "reqDownload")) {
                         if (res != null) {
                             String contentLength = String.valueOf(sel(res.headers().get("Content-Length"), -1));
                             if (!contentLength.equals("-1")) {
@@ -527,7 +573,7 @@ public class AutoUpdatePluginsVelocity {
                         Map<String, Object> p = (Map<String, Object>) temp.get(pPath);
                         if (String.valueOf(p.getOrDefault("dUrl", "")).equals(dUrl) &&
                                 String.valueOf(p.getOrDefault("feature", "")).equals(feature)) {
-                            log(logLevel.MARK, "[缓存] 文件已是最新版本");
+                            log(logLevel.MARK, gm("updateTempAlreadyLatest", "[缓存] 文件已是最新版本"));
                             _fail--;
                             continue;
                         }
@@ -536,7 +582,7 @@ public class AutoUpdatePluginsVelocity {
 
                 // 下载文件到缓存目录
                 if (!downloadFile(dUrl, c_tempPath)) {
-                    log(logLevel.WARN, "下载文件时出现异常, 将跳过此更新");
+                    log(logLevel.WARN, gm("updateErrDownload", "下载文件时出现异常, 将跳过此更新"));
                     delFile(c_tempPath);
                     continue;
                 }
@@ -548,7 +594,7 @@ public class AutoUpdatePluginsVelocity {
                 if (c_zipFileCheck && Pattern.compile(getConfigString("zipFileCheckList", "\\.(?:jar|zip)$"))
                         .matcher(c_file).find()) {
                     if (!isJARFileIntact(c_tempPath)) {
-                        log(logLevel.WARN, "[Zip 完整性检查] 文件不完整, 将跳过此更新");
+                        log(logLevel.WARN, gm("updateZipFileCheck", "[Zip 完整性检查] 文件不完整, 将跳过此更新"));
                         delFile(c_tempPath);
                         continue;
                     }
@@ -566,18 +612,40 @@ public class AutoUpdatePluginsVelocity {
                     saveTemp();
                 }
 
+                // 从压缩包中解压文件
+                if (!c_zipGet.isEmpty()) {
+                    String zipFilePath = c_tempPath + "_aup.zip";
+                    try {
+                        Files.move(Paths.get(c_tempPath), Paths.get(zipFilePath), StandardCopyOption.REPLACE_EXISTING);
+                    } catch (java.io.IOException e) {
+                        log(logLevel.WARN, e.getMessage());
+                        delFile(c_tempPath);
+                        delFile(zipFilePath);
+                        continue;
+                    }
+                    boolean ok = unzip(zipFilePath, c_zipGet, c_tempPath);
+                    delFile(zipFilePath);
+                    if (!ok) {
+                        log(logLevel.WARN, gm("zipDecompressionFailed", "ZIP 解压失败"));
+                        delFile(c_tempPath);
+                        continue;
+                    }
+                }
+
+                // 哈希值检查, 如果新文件哈希与更新目录中的相等, 或者与正在运行的版本相等, 则无需更新
                 if (getConfigBoolean("ignoreDuplicates", true) && (boolean) sel(li.get("ignoreDuplicates"), true)) {
                     String updatePathFileHas = fileHash(c_updatePath);
                     String tempFileHas = fileHash(c_tempPath);
                     if (Objects.equals(tempFileHas, updatePathFileHas)
                             || Objects.equals(tempFileHas, fileHash(c_filePath))) {
-                        log(logLevel.MARK, "文件已是最新版本");
+                        log(logLevel.MARK, gm("updateFileAlreadyLatest", "文件已是最新版本"));
                         _fail--;
                         delFile(c_tempPath);
                         continue;
                     }
                 }
 
+                // 获取旧版本的文件大小, 优先在更新目录中查找, 没有再查找最终安装位置. 如果文件均不存在会返回 0
                 float oldFileSize = new File(c_updatePath).exists() ? new File(c_updatePath).length()
                         : new File(c_filePath).length();
 
@@ -588,8 +656,7 @@ public class AutoUpdatePluginsVelocity {
                     log(logLevel.WARN, e.getMessage());
                 }
 
-                log(logLevel.DEBUG, "更新完成 [" + String.format("%.2f", oldFileSize / 1048576) + "MB] -> ["
-                        + String.format("%.2f", fileSize / 1048576) + "MB]");
+                log(logLevel.DEBUG, piece(piece(gm("updateFulSizeDifference", "更新完成 [%1MB] -> [%2MB]"), String.format("%.2f", oldFileSize / 1048576)), String.format("%.2f", fileSize / 1048576)));
 
                 _success++;
                 _fail--;
@@ -624,10 +691,67 @@ public class AutoUpdatePluginsVelocity {
             return "null";
         }
 
-        public String getFileUrl(String _url, String matchFileName, String matchLoader) {
+        // 从 zip 中解压第一个匹配正则表达式的文件
+        public boolean unzip(String zipFilePath, String regex, String destPath) {
+            Pattern pattern = Pattern.compile(regex);
+            Path targetFile = Paths.get(destPath);
+            try (ZipFile zipFile = new ZipFile(zipFilePath)) {
+                Enumeration<? extends ZipEntry> entries = zipFile.entries();
+                while (entries.hasMoreElements()) {
+                    ZipEntry entry = entries.nextElement();
+                    if (entry.isDirectory()) {
+                        continue;
+                    }
+                    if (pattern.matcher(entry.getName()).matches()) {
+                        if (targetFile.getParent() != null) {
+                            Files.createDirectories(targetFile.getParent());
+                        }
+                        try (InputStream is = zipFile.getInputStream(entry)) {
+                            Files.copy(is, targetFile, StandardCopyOption.REPLACE_EXISTING);
+                        }
+                        return true;
+                    }
+                }
+            } catch (java.io.IOException e) {
+                log(logLevel.WARN, e.getMessage());
+            }
+            return false;
+        }
+
+        // 获取部分文件直链
+        public String getFileUrl(String _url, String matchFileName, String matchLoader, String matchVersion) {
             String url = _url.replaceAll("/$", "");
 
-            if (url.contains("://github.com/")) {
+            if (url.contains("://github.com/") && url.endsWith("/actions")) {
+                _nowParser = "[GitHub_Actions] ";
+                Matcher matcher = Pattern.compile("/([^/]+)/([^/]+)$").matcher(url.replaceAll("/actions$", ""));
+                if (matcher.find()) {
+                    String data = httpGet("https://api.github.com/repos" + matcher.group(0) + "/actions/artifacts");
+                    if (data == null)
+                        return null;
+                    Map<?, ?> map = (Map<?, ?>) new com.google.gson.Gson().fromJson(data, HashMap.class);
+                    ArrayList<?> artifacts = (ArrayList<?>) map.get("artifacts");
+                    for (Object _li : artifacts) {
+                        Map<?, ?> li = (Map<?, ?>) _li;
+                        String name = String.valueOf(li.get("name"));
+                        if (matchFileName.isEmpty() || Pattern.compile(matchFileName).matcher(name).matches()) {
+                            if (li.get("workflow_run") == null)
+                                continue;
+                            Map<?, ?> workflow_run = (Map<?, ?>) li.get("workflow_run");
+                            long workflowId = ((Number) workflow_run.get("id")).longValue();
+                            String dUrl = "https://nightly.link" + matcher.group(0) + "/actions/runs/" + workflowId + "/" + name + ".zip";
+                            log(logLevel.DEBUG, _nowParser + piece(gm("debugGetVersion", "找到版本: %1"), dUrl));
+                            return dUrl;
+                        }
+                    }
+                    log(logLevel.WARN, _nowParser + piece(gm("debugNoFileMatching", "没有匹配的文件: %1"), url));
+                    return null;
+                }
+                log(logLevel.WARN, _nowParser + piece(gm("debugNoRepositoryPath", "未找到存储库路径: %1"), url));
+                return null;
+            }
+
+            else if (url.contains("://github.com/")) {
                 _nowParser = "[GitHub] ";
                 Matcher matcher = Pattern.compile("/([^/]+)/([^/]+)$").matcher(url);
                 if (matcher.find()) {
@@ -650,14 +774,14 @@ public class AutoUpdatePluginsVelocity {
                         String fileName = String.valueOf(li.get("name"));
                         if (matchFileName.isEmpty() || Pattern.compile(matchFileName).matcher(fileName).matches()) {
                             String dUrl = String.valueOf(li.get("browser_download_url"));
-                            log(logLevel.DEBUG, _nowParser + "找到版本: " + dUrl);
+                            log(logLevel.DEBUG, _nowParser + piece(gm("debugGetVersion", "找到版本: %1"), dUrl));
                             return dUrl;
                         }
                     }
-                    log(logLevel.WARN, "[GitHub] 没有匹配的文件: " + url);
+                    log(logLevel.WARN, "[GitHub] " + piece(gm("debugNoFileMatching", "没有匹配的文件: %1"), url));
                     return null;
                 }
-                log(logLevel.WARN, "[GitHub] 未找到存储库路径: " + url);
+                log(logLevel.WARN, "[GitHub] " + piece(gm("debugNoRepositoryPath", "未找到存储库路径: %1"), url));
                 return null;
             }
 
@@ -673,11 +797,11 @@ public class AutoUpdatePluginsVelocity {
                     String fileName = String.valueOf(li.get("fileName"));
                     if (matchFileName.isEmpty() || Pattern.compile(matchFileName).matcher(fileName).matches()) {
                         String dUrl = url + "/lastSuccessfulBuild/artifact/" + li.get("relativePath");
-                        log(logLevel.DEBUG, _nowParser + "找到版本: " + dUrl);
+                        log(logLevel.DEBUG, _nowParser + piece(gm("debugGetVersion", "找到版本: %1"), dUrl));
                         return dUrl;
                     }
                 }
-                log(logLevel.WARN, "[Jenkins] 没有匹配的文件: " + url);
+                log(logLevel.WARN, "[Jenkins] " + piece(gm("debugNoFileMatching", "没有匹配的文件: %1"), url));
                 return null;
             }
 
@@ -686,10 +810,10 @@ public class AutoUpdatePluginsVelocity {
                 Matcher matcher = Pattern.compile("([0-9]+)$").matcher(url);
                 if (matcher.find()) {
                     String dUrl = "https://api.spiget.org/v2/resources/" + matcher.group(1) + "/download";
-                    log(logLevel.DEBUG, _nowParser + "找到版本: " + dUrl);
+                    log(logLevel.DEBUG, _nowParser + piece(gm("debugGetVersion", "找到版本: %1"), dUrl));
                     return dUrl;
                 }
-                log(logLevel.WARN, "[Spigot] URL 解析错误, 不包含插件 ID?: " + url);
+                log(logLevel.WARN, "[Spigot] " + piece(gm("debugErrUrlResolveNoID", "URL 解析错误, 不包含插件 ID?: %1"), url));
                 return null;
             }
 
@@ -704,14 +828,23 @@ public class AutoUpdatePluginsVelocity {
                     // 遍历版本列表
                     for (Object _version : versions) {
                         Map<?, ?> version = (Map<?, ?>) _version;
-                        // 检查标签 loaders
+                        // 检查平台 loaders
                         if (!matchLoader.isEmpty()) {
                             ArrayList<String> loaders = new ArrayList<>();
                             for (Object loader : (ArrayList<?>) version.get("loaders")) {
                                 loaders.add(String.valueOf(loader).toLowerCase());
                             }
-                            // 标签不匹配时跳过
                             if (!loaders.contains(matchLoader)) {
+                                continue;
+                            }
+                        }
+                        // 检查版本 game_versions
+                        if (!matchVersion.isEmpty()) {
+                            ArrayList<String> game_versions = new ArrayList<>();
+                            for (Object gv : (ArrayList<?>) version.get("game_versions")) {
+                                game_versions.add(String.valueOf(gv).toLowerCase());
+                            }
+                            if (!game_versions.contains(matchVersion)) {
                                 continue;
                             }
                         }
@@ -722,22 +855,22 @@ public class AutoUpdatePluginsVelocity {
                             String fileName = String.valueOf(file.get("filename"));
                             if (matchFileName.isEmpty() || Pattern.compile(matchFileName).matcher(fileName).matches()) {
                                 String dUrl = String.valueOf(file.get("url"));
-                                log(logLevel.DEBUG, _nowParser + "找到版本: " + dUrl);
+                                log(logLevel.DEBUG, _nowParser + piece(gm("debugGetVersion", "找到版本: %1"), dUrl));
                                 return dUrl;
                             }
                         }
                     }
-                    log(logLevel.WARN, "[Modrinth] 没有匹配的文件: " + url);
+                    log(logLevel.WARN, "[Modrinth] " + piece(gm("debugNoFileMatching", "没有匹配的文件: %1"), url));
                     return null;
                 }
-                log(logLevel.WARN, "[Modrinth] URL 解析错误, 未找到项目名称: " + url);
+                log(logLevel.WARN, "[Modrinth] " + piece(gm("debugErrUrlResolveNoName", "URL 解析错误, 未找到项目名称: %1"), url));
                 return null;
             }
 
             else if (url.contains("://dev.bukkit.org/")) {
                 _nowParser = "[Bukkit] ";
                 String dUrl = url + "/files/latest";
-                log(logLevel.DEBUG, _nowParser + "找到版本: " + dUrl);
+                log(logLevel.DEBUG, _nowParser + piece(gm("debugGetVersion", "找到版本: %1"), dUrl));
                 return dUrl;
             }
 
@@ -746,10 +879,10 @@ public class AutoUpdatePluginsVelocity {
                 Matcher matcher = Pattern.compile("/([^/]+)/([^/]+)/([^/]+)$").matcher(url);
                 if (matcher.find()) {
                     String dUrl = "https://builds.guizhanss.com/api/download" + matcher.group(0) + "/latest";
-                    log(logLevel.DEBUG, _nowParser + "找到版本: " + dUrl);
+                    log(logLevel.DEBUG, _nowParser + piece(gm("debugGetVersion", "找到版本: %1"), dUrl));
                     return dUrl;
                 }
-                log(logLevel.WARN, _nowParser + "未找到存储库路径: " + url);
+                log(logLevel.WARN, _nowParser + piece(gm("debugNoRepositoryPath", "未找到存储库路径: %1"), url));
                 return null;
             }
 
@@ -774,11 +907,11 @@ public class AutoUpdatePluginsVelocity {
                         ArrayList<?> arr = (ArrayList<?>) new com.google.gson.Gson().fromJson(data, ArrayList.class);
                         Map<?, ?> map = (Map<?, ?>) arr.get(arr.size() - 1);
                         String dUrl = String.valueOf(map.get("downloadUrl"));
-                        log(logLevel.DEBUG, _nowParser + "找到版本: " + dUrl);
+                        log(logLevel.DEBUG, _nowParser + piece(gm("debugGetVersion", "找到版本: %1"), dUrl));
                         return dUrl;
                     }
                 }
-                log(logLevel.WARN, _nowParser + "未找到项目 ID: " + url);
+                log(logLevel.WARN, _nowParser + piece(gm("debugErrNoID", "未找到项目 ID: %1"), url));
                 return null;
             }
 
@@ -796,19 +929,28 @@ public class AutoUpdatePluginsVelocity {
             return in1;
         }
 
-        public okhttp3.Response fetch(String url, boolean head) {
+        public okhttp3.Response fetch(String url, boolean head, String proxyReqType) {
             _allRequests++;
             // HTTP 客户端
             okhttp3.OkHttpClient.Builder client = new okhttp3.OkHttpClient.Builder();
 
-            // 启用网络代理
+            // 启用网络代理（按请求类型 proxy.reqApi / proxy.reqDownload）
             if (!getConfigString("proxy.type", "DIRECT").equals("DIRECT")) {
-                Proxy proxy = new Proxy(
-                        Proxy.Type.valueOf(getConfigString("proxy.type", "HTTP")),
-                        new InetSocketAddress(
-                                getConfigString("proxy.host", "127.0.0.1"),
-                                (int) getConfigLong("proxy.port", 7890)));
-                client.proxy(proxy);
+                boolean useProxy = true;
+                Object px = getConfig("proxy");
+                if (px instanceof Map) {
+                    Object v = ((Map<?, ?>) px).get(proxyReqType);
+                    useProxy = v == null || Boolean.TRUE.equals(v) || "true".equalsIgnoreCase(String.valueOf(v));
+                }
+                if (useProxy) {
+                    log(logLevel.DEBUG, "[HTTP] [proxyReqType] " + proxyReqType);
+                    Proxy proxy = new Proxy(
+                            Proxy.Type.valueOf(getConfigString("proxy.type", "HTTP").toUpperCase()),
+                            InetSocketAddress.createUnresolved(
+                                    getConfigString("proxy.host", "127.0.0.1"),
+                                    (int) getConfigLong("proxy.port", 7890)));
+                    client.proxy(proxy);
+                }
             }
 
             // 禁用 SSL 验证
@@ -861,7 +1003,7 @@ public class AutoUpdatePluginsVelocity {
                 if (i > 0) {
                     try {
                         long delay = getConfigInt("fetchErrRetryDelay", 5) + ((i - 1) * 2L);
-                        log(logLevel.NET_WARN, "[HTTP] 网络错误, 等待 " + delay + " 秒...");
+                        log(logLevel.NET_WARN, "[HTTP] " + piece(gm("networkErrorRetry", "网络错误, 等待 %1 秒..."), delay));
                         Thread.sleep(delay * 1000L);
                     } catch (InterruptedException e) {
                         throw new RuntimeException(e);
@@ -885,12 +1027,11 @@ public class AutoUpdatePluginsVelocity {
         }
 
         public String httpGet(String url) {
-            try (okhttp3.Response res = fetch(url, false)) {
+            log(logLevel.DEBUG, "[HTTP] [httpGet] " + url);
+            try (okhttp3.Response res = fetch(url, false, "reqApi")) {
                 if (res == null)
                     return null;
-                String str = res.body().string();
-                res.close();
-                return str;
+                return res.body().string();
             } catch (java.io.IOException e) {
                 log(logLevel.NET_WARN, "[HTTP] " + e.getMessage());
             }
@@ -898,7 +1039,8 @@ public class AutoUpdatePluginsVelocity {
         }
 
         public boolean downloadFile(String url, String path) {
-            try (okhttp3.Response res = fetch(url, false)) {
+            log(logLevel.DEBUG, "[HTTP] [downloadFile] " + url);
+            try (okhttp3.Response res = fetch(url, false, "reqDownload")) {
                 if (res == null)
                     return false;
                 try (InputStream inputStream = res.body().byteStream();
@@ -910,7 +1052,6 @@ public class AutoUpdatePluginsVelocity {
                         outputStream.write(buffer, 0, bytesRead);
                     }
                 }
-                res.close();
                 return true;
             } catch (java.io.IOException e) {
                 log(logLevel.NET_WARN, "[HTTP] " + e.getMessage());
@@ -933,16 +1074,16 @@ public class AutoUpdatePluginsVelocity {
             if (userLogLevel.contains(level.name)) {
                 switch (level.name) {
                     case "DEBUG":
-                        logger.info("[AUP] " + _fileName + text);
+                        logger.info(_fileName + text);
                         break;
                     case "INFO":
-                        logger.info("[AUP] " + text);
+                        logger.info(text);
                         break;
                     case "MARK":
-                        logger.info("[AUP] " + _fileName + text);
+                        logger.info(_fileName + text);
                         break;
                     case "WARN", "NET_WARN":
-                        logger.warn("[AUP] " + _fileName + text);
+                        logger.warn(_fileName + text);
                         break;
                 }
             }

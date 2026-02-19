@@ -18,7 +18,9 @@ Download: https://modrinth.com/plugin/AutoUpdatePlugins
 - [x] Automatically find download links based on plugin release page
     - `GitHub, Jenkins, Spigot, Modrinth, Bukkit, Ghost Chop Build Station v2, MineBBS, CurseForge`.
         - Support downloading pre-releases from GitHub.
+        - Supports downloading files in GitHub Actions, enabling login-free downloading through https://nightly.link/
         - Support for specifying platforms in Modrinth
+        - Support specifying the version in Modrinth
 - [x] Support matching different files under the same release
     - `GitHub, Jenkins, Modrinth`.
 - [x] Support for file integrity checking
@@ -100,6 +102,9 @@ proxy:
   type: DIRECT # DIRECT | HTTP | SOCKS
   host: '127.0.0.1'
   port: 7890
+  # Control proxy usage for different requests
+  reqApi: true
+  reqDownload: true
 
 # Edit request headers in HTTP requests
 setRequestProperty:
@@ -134,6 +139,20 @@ list:
 #    url: https://github.com/EssentialsX/Essentials
 #    get: 'EssentialsXChat-.*\.jar'
 
+#  - file: 'TrPlugins.jar'  # Download the file from GitHub Actions
+#    url: https://github.com/TrPlugins/TrChat/actions
+#    get: 'TrChat Artifacts'  # Match the names of Artifacts Produced during runtime
+#    zipGet: 'TrChat-[\.\d]+\.jar'  # Decompression: Match files in compressed packages
+
+#  - file: 'Chat2QQ.jar'
+#    url: https://github.com/ApliNi/Chat2QQ/actions
+#    get: 'Chat2QQ\.jar'
+#    zipGet: 'Chat2QQ\.jar'
+
+#   - file: 'test.jar'
+#     url: https://www.spigotmc.org/resources/invsee.82342/
+#     zipGet: 'InvSee\+\+\.jar' # Unzip the file
+
 #  - file: 'Geyser-Spigot.jar' # URL
 #    url: https://download.geysermc.org/v2/projects/geyser/versions/latest/builds/latest/downloads/spigot
 
@@ -149,6 +168,7 @@ list:
 #  - file: 'simple-voice-chat.jar'
 #    url: https://modrinth.com/plugin/simple-voice-chat
 #    loader: paper # Specify platform
+#    version: ServerVersion # Specify version, '1.21.10' / ServerVersion
 
 #  - file: 'UseTranslatedNames.jar'
 #    url: https://modrinth.com/plugin/usetranslatednames
@@ -183,7 +203,9 @@ list:
 # String filePath;          // The final installation path, used globally by default.
 # String path;              // Overriding both updatePath and filePath configurations
 # String get;               // Regular expression to select the specified file, first one is selected by default. GitHub, Jenkins, Modrinth only.
+# String zipGet;            // If you need to unzip files, use this parameter to specify the regular expression.
 # String loader;            // Match platform tags, Modrinth only
+# String version;           // Match plugin version, Modrinth only, Fill in "ServerVersion" to automatically select the server version
 # boolean getPreRelease;    // Allow downloading of pre-releases, false by default. GitHub only.
 # boolean zipFileCheck;     // Enable zip file integrity checking
 # boolean ignoreDuplicates; // Turn off hash checking
@@ -228,6 +250,7 @@ message:
   debugErrNoID: 'Project ID not found: %1'
   urlInvalid: 'URL is invalid or irregular: %1'
   networkErrorRetry: 'Network error, please wait %1 seconds...'
+  zipDecompressionFailed: 'ZIP decompression failed'
 
 ```
 
