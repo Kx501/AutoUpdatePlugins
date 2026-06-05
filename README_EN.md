@@ -206,6 +206,7 @@ list:
 # String zipGet;            // If you need to unzip files, use this parameter to specify the regular expression.
 # String loader;            // Match platform tags, Modrinth only
 # String version;           // Match plugin version, Modrinth only, Fill in "ServerVersion" to automatically select the server version
+# String c_version_type;    // Version type (Release channel), For example beta, release, Modrinth only
 # boolean getPreRelease;    // Allow downloading of pre-releases, false by default. GitHub only.
 # boolean zipFileCheck;     // Enable zip file integrity checking
 # boolean ignoreDuplicates; // Turn off hash checking

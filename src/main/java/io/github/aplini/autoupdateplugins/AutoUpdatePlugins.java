@@ -272,6 +272,7 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
         String c_zipGet;            // 如果需要解压文件, 使用这个参数指定正则表达式
         String c_loader;            // 插件加载器, 仅限 Modrinth
         String c_version;           // 插件版本, 仅限 Modrinth
+        String c_version_type;      // 版本类型, 仅限 Modrinth
         boolean c_zipFileCheck;     // 启用 zip 文件完整性检查, 默认默认使用全局配置或 true
         boolean c_getPreRelease;    // 允许下载预发布版本, 默认 false. 仅限 GitHub
 
@@ -389,6 +390,7 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                 c_zipGet = (String) SEL(li.get("zipGet"), "");
                 c_loader = ((String) SEL(li.get("loader"), "")).toLowerCase();
                 c_version = ((String) SEL(li.get("version"), "")).toLowerCase();
+                c_version_type = ((String) SEL(li.get("version_type"), "")).toLowerCase();
                 c_zipFileCheck = (boolean) SEL(li.get("zipFileCheck"), getConfig().getBoolean("zipFileCheck", true));
                 c_getPreRelease = (boolean) SEL(li.get("getPreRelease"), false);
 
@@ -403,7 +405,7 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                 log(logLevel.DEBUG, m.updateChecking);
 
                 // 找到文件下载链接
-                String dUrl = getFileUrl(c_url, c_get, c_loader, c_version);
+                String dUrl = getFileUrl(c_url, c_get, c_loader, c_version, c_version_type);
                 if(dUrl == null){
                     log(logLevel.WARN, _nowParser + m.updateErrParsingDUrl);
                     continue;
@@ -598,7 +600,7 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
         }
 
         // 获取部分文件直链
-        public String getFileUrl(String _url, String matchFileName, String matchLoader, String matchVersion) {
+        public String getFileUrl(String _url, String matchFileName, String matchLoader, String matchVersion, String matchVersionType) {
             // 移除 URL 最后的斜杠
             String url = _url.replaceAll("/$", "");
 
@@ -712,7 +714,7 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                 Matcher matcher = Pattern.compile("/([^/]+)$").matcher(url);
                 if(matcher.find()) {
                     String data = httpGet("https://api.modrinth.com/v2/project"+ matcher.group(0) +"/version");
-                    if(data == null){return null;}
+                    if(data == null) return null;
                     ArrayList<?> versions = new Gson().fromJson(data, ArrayList.class);
                     // 遍历版本列表
                     for(Object _version : versions){
@@ -723,7 +725,7 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                             for(Object loader : (ArrayList<?>) version.get("loaders")){
                                 loaders.add(((String) loader).toLowerCase());
                             }
-                            if(!loaders.contains(matchLoader)){continue;}
+                            if(!loaders.contains(matchLoader)) continue;
                         }
                         // 检查版本 game_versions: []
                         if(!matchVersion.isEmpty()){
@@ -731,9 +733,14 @@ public final class AutoUpdatePlugins extends JavaPlugin implements Listener, Com
                             for(Object game_version : (ArrayList<?>) version.get("game_versions")){
                                 game_versions.add(((String) game_version).toLowerCase());
                             }
-                            if(!game_versions.contains(matchVersion)){continue;}
+                            if(!game_versions.contains(matchVersion)) continue;
                         }
                         ArrayList<?> files = (ArrayList<?>) version.get("files");
+                        // 检查版本类型 version_type: ""
+                        if(!matchVersionType.isEmpty()){
+                            String version_type = (String) version.get("version_type");
+                            if(!matchVersionType.equals(version_type)) continue;
+                        }
                         // 遍历发布文件列表
                         for(Object _file : files){
                             Map<?, ?> file = (Map<?, ?>) _file;

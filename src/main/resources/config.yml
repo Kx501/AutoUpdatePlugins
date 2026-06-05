@@ -144,6 +144,7 @@ list:
 # String zipGet;            // 如果需要解压文件, 使用这个参数指定正则表达式
 # String loader;            // 匹配平台标签, 仅限 Modrinth
 # String version;           // 匹配插件版本, 仅限 Modrinth, 填写 "ServerVersion" 自动选择服务器版本
+# String c_version_type;    // 版本类型 (发布频道), 如 beta, release, 仅限 Modrinth
 # boolean getPreRelease;    // 允许下载预发布版本, 默认 false. 仅限 GitHub
 # boolean zipFileCheck;     // 启用 zip 文件完整性检查
 # boolean ignoreDuplicates; // 关闭哈希检查
