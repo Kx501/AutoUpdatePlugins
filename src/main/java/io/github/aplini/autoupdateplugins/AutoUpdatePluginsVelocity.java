@@ -397,6 +397,7 @@ public class AutoUpdatePluginsVelocity {
         String c_zipGet;            // 如果需要解压文件, 使用这个参数指定正则表达式
         String c_loader;           // 插件加载器, 仅限 Modrinth
         String c_version;         // 插件版本, 仅限 Modrinth
+        String c_version_type;      // 版本类型, 仅限 Modrinth
         boolean c_zipFileCheck;
         boolean c_getPreRelease;
 
@@ -516,6 +517,7 @@ public class AutoUpdatePluginsVelocity {
                 c_zipGet = String.valueOf(sel(li.get("zipGet"), ""));
                 c_loader = String.valueOf(sel(li.get("loader"), "")).toLowerCase();
                 c_version = String.valueOf(sel(li.get("version"), "")).toLowerCase();
+                c_version_type = String.valueOf(sel(li.get("version_type"), "")).toLowerCase();
                 c_zipFileCheck = (boolean) sel(li.get("zipFileCheck"), getConfigBoolean("zipFileCheck", true));
                 c_getPreRelease = (boolean) sel(li.get("getPreRelease"), false);
 
@@ -528,7 +530,7 @@ public class AutoUpdatePluginsVelocity {
 
                 log(logLevel.DEBUG, gm("updateChecking", "正在检查更新..."));
 
-                String dUrl = getFileUrl(c_url, c_get, c_loader, c_version);
+                String dUrl = getFileUrl(c_url, c_get, c_loader, c_version, c_version_type);
                 if (dUrl == null) {
                     log(logLevel.WARN, _nowParser + gm("updateErrParsingDUrl", "解析文件直链时出现错误, 将跳过此更新"));
                     continue;
@@ -719,7 +721,7 @@ public class AutoUpdatePluginsVelocity {
         }
 
         // 获取部分文件直链
-        public String getFileUrl(String _url, String matchFileName, String matchLoader, String matchVersion) {
+        public String getFileUrl(String _url, String matchFileName, String matchLoader, String matchVersion, String matchVersionType) {
             String url = _url.replaceAll("/$", "");
 
             if (url.contains("://github.com/") && url.endsWith("/actions")) {
@@ -849,6 +851,13 @@ public class AutoUpdatePluginsVelocity {
                             }
                         }
                         ArrayList<?> files = (ArrayList<?>) version.get("files");
+                        // 检查版本类型 version_type
+                        if (!matchVersionType.isEmpty()) {
+                            String version_type = String.valueOf(version.get("version_type"));
+                            if (!matchVersionType.equals(version_type)) {
+                                continue;
+                            }
+                        }
                         // 遍历发布文件列表
                         for (Object _file : files) {
                             Map<?, ?> file = (Map<?, ?>) _file;
